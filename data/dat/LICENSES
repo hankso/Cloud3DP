@@ -1,0 +1,42 @@
+This file contains information about licenses used in project TempCtrl.
+
+Copyright (c) 2020 Hankso <hankso1106@gmail.com>
+
+Released under the MIT license
+
+Date: Thu, 12 Mar 2020 23:56:11 +0000
+
+Contains:
+
+    ESP-IDF <https://github.com/espressif/esp-idf>
+    Copyright (c) 2016-2019 Espressif Systems (Shanghai) CO., LTD
+    Distributed under the Apache License 2.0
+    
+    Arduino-ESP32 <https://github.com/espressif/arduino-esp32>
+    Licensed under the GNU Lesser General Public License LGPL-2.1
+
+    AsyncTCP <https://github.com/me-no-dev/AsyncTCP>
+    Copyright (c) 2018 Hristo Gochkov
+    Licensed under the GNU Lesser General Public License LGPL-3.0
+
+    ESPAsyncWebServer <https://github.com/me-no-dev/ESPAsyncWebServer>
+    Copyright (c) 2018 Hristo Gochkov
+    Licensed under the GNU Lesser General Public License LGPL-3.0
+
+
+    Marlin 2.0 <http://marlinfw.org>
+    Distrubuted under the GNU General Public License GPL-3.0
+
+    ESP3D
+
+    ECharts 4.6.0
+
+    FontAwesome 5.12.1
+
+    Bootstrap 4.3.1
+
+    jQuery 3.4.1
+
+    jQuery Terminal 2.6.3 <https://terminal.jcubic.pl>
+    Copyright (c) 2010-2019 Jakub T. Jankiewicz <https://jcubic.pl/me>
+    Available under the MIT License
