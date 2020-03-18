@@ -35,7 +35,7 @@ void console_handle_loop(void*);
  * Create a xTask of console_handle_loop.
  * Save TaskHandle if parameter pxCreatedTask specified.
  */
-void console_loop_begin(TaskHandle_t *pxCreatedTask = NULL, int xCoreID = 0);
+void console_loop_begin(int xCoreID = 1);
 
 /*
  * Stop loopTask created by console_loop_begin (i.e. terminate the xTask).

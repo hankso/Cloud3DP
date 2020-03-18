@@ -81,9 +81,11 @@ void max6675_read() {
 
 size_t max6675_json(char *buffer) {
     uint16_t len = 0, maxlen = sizeof(buffer);
+    snprintf(buffer, maxlen, "[");
     for (int i = 0; i < 6; i++) {
         len += snprintf(buffer, maxlen, "%s%d", i ? "," : "", temprature[i]);
-        if (len > (maxlen - 2)) return 0;
+        if (len > (maxlen - 1)) return 0;
     }
-    return sprintf(buffer, "[%s]", buffer);
+    sprintf(buffer, "]");
+    return len + 2;
 }

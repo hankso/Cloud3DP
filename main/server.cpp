@@ -3,10 +3,16 @@
  * Authors: Hank <hankso1106@gmail.com>
  * Create: 2019-05-27 15:29:05
  *
- * API list:
- *  name    method  description
+ * STA API list:
+ *  Name    Method  Description
  *  /ws     POST    websocket connection point
  *  /temp   GET     return json string containing temprature values
+ *  /cmd    POST    TODO
+ *
+ * AP API list:
+ *  Name    Method  Description
+ *  /config GET     TODO
+ *  /config POST    TODO
  *  /update GET     Updation guide page
  *  /update POST    upload compiled binary firmware to OTA flash partition
  *  /list   GET     do SPIFFS listdir with parameter `?dir=/pathname`
@@ -17,22 +23,23 @@
  */
 
 #include "server.h"
+#include "gpio.h"
 #include "config.h"
 #include "globals.h"
 
 #include <FS.h>
 // #include <FFat.h>
 // #define FFS FFat
-#include <SPIFFS.h>
+#include <SPIFFS.h>  // TODO
 #define FFS SPIFFS
 
-#include <Update.h>
+#include <Update.h>  // TODO
 
 void server_initialize() { WebServer.begin(); }
 
 static const char
 *TAG = "Server", *WS = "WebSocket",
-*ERROR_HTML = 
+*ERROR_HTML =
     "<html>"
     "<head>"
         "<title>Page not found</title>"
@@ -44,7 +51,16 @@ static const char
         "<a href='/index.html'>Go back to homepage.</a>"
     "</body>"
     "</html>",
-*UPDATE_HTML = 
+*CONFIG_HTML =
+    "<html>"
+    "<head>"
+        "<title>Configuration</title>"
+    "</head>"
+    "<body>"
+        "TODO"
+    "</body>"
+    "</html>",
+*UPDATE_HTML =
     "<html>"
     "<head>"
         "<title>OTA Updation</title>"
@@ -57,7 +73,7 @@ static const char
     "<body>"
     "</html>";
 
-static bool logging = true;
+static bool log_request = true;
 
 inline String jsonify_dir(File dir) {
     String path, type, msg = "";
@@ -79,7 +95,7 @@ inline String jsonify_dir(File dir) {
 }
 
 void log_msg(AsyncWebServerRequest *req, const char *msg = "") {
-    if (!logging) return;
+    if (!log_request) return;
     ESP_LOGD(TAG, "%4s %s%s", req->methodToString(), req->url().c_str(), msg);
 }
 
@@ -97,8 +113,11 @@ void onUpdatePost(AsyncWebServerRequest *request, String filename, size_t index,
         log_msg(request);
         ESP_LOGW(TAG, "Updating file: %s\n", filename.c_str());
         // Update.runAsync(true);
-        if (!Update.begin()) return Update.printError(Serial);
-        else Update.onProgress([](uint32_t progress, size_t size){
+        if (!Update.begin()) {
+            ESP_LOGE(TAG, "Update error: %s", Update.errorString());
+            return;
+        }
+        Update.onProgress([](uint32_t progress, size_t size){
             float rate = (float)progress / size * 100;
             progress /= 1024; size /= 1024;
             ESP_LOGI(TAG, "\rProgress: %.2f%% %d/%d KB", rate, progress, size);
@@ -106,15 +125,15 @@ void onUpdatePost(AsyncWebServerRequest *request, String filename, size_t index,
         LIGHTBLK(3);
     }
     LIGHTON();
-    if (!Update.hasError() and Update.write(data, len) != len) {
-        Update.printError(Serial);
+    if (!Update.hasError() && Update.write(data, len) != len) {
+        ESP_LOGE(TAG, "Update error: %s", Update.errorString());
     }
     if (final) {
         ESP_LOGI(TAG, "");
         if (Update.end(true)) {
             ESP_LOGW(TAG, "Update success: %.2f KB\n", (index + len) / 1024.0);
         } else {
-            Update.printError(Serial);
+            ESP_LOGE(TAG, "Update error: %s", Update.errorString());
         }
     }
     LIGHTOFF();
@@ -219,7 +238,7 @@ void onUpload(AsyncWebServerRequest *request, String filename, size_t index, uin
         log_msg(request);
         ESP_LOGW(TAG, "Uploading file: %s\n", filename.c_str());
         if (!filename.startsWith("/")) {
-            filename = Config.web.DIR_UPLOAD + filename;
+            filename = Config.web.DIR_DATA + filename;
         }
         if (FFS.exists(filename) && !request->hasParam("overwrite")) {
             LIGHTOFF();
@@ -242,7 +261,7 @@ void onUpload(AsyncWebServerRequest *request, String filename, size_t index, uin
 }
 
 void onUploadStrict(AsyncWebServerRequest *request, String filename, size_t index, uint8_t *data, size_t len, bool final){
-    if (!filename.startsWith(Config.web.DIR_UPLOAD)) {
+    if (!filename.startsWith(Config.web.DIR_DATA)) {
         log_msg(request, "400");
         return request->send(400, "text/plain", "No access to upload.");
     }
@@ -429,21 +448,28 @@ void WebServerClass::register_http_api() {
 
 void WebServerClass::register_websocket() {
     _wsocket.onEvent(onWebSocket);
-    _wsocket.setAuthentication(Config.web.USER_WS, Config.web.PASS_WS);
+    _wsocket.setAuthentication(Config.web.WS_NAME, Config.web.WS_PASS);
     _server.addHandler(&_wsocket);
 }
 
 void WebServerClass::register_statics() {
     // _server.rewrite("/", "index.html");
-    _server.serveStatic("/", FFS, Config.web.DIR_STATIC)
+
+    _server.rewrite("/index.html", "/ap/index.html").setFilter(ON_AP_FILTER);
+    _server.serveStatic("/ap/", FFS, Config.web.DIR_AP)
         .setDefaultFile("index.html")
         .setCacheControl("max-age=3600")
-        .setAuthentication(Config.web.USER_WEB, Config.web.PASS_WEB);
+        .setAuthentication(Config.web.HTTP_NAME, Config.web.HTTP_PASS)
+        .setFilter(ON_AP_FILTER);
+
+    _server.serveStatic("/", FFS, Config.web.DIR_STA)
+        .setDefaultFile("index.html")
+        .setFilter(ON_STA_FILTER);
     _server.onNotFound(onError);
     _server.onFileUpload(onUploadStrict);
 }
 
-bool WebServerClass::logging() { return logging; }
-void WebServerClass::logging(bool log) { logging = log; }
+bool WebServerClass::logging() { return log_request; }
+void WebServerClass::logging(bool log_request) { log_request = log_request; }
 
 WebServerClass WebServer;

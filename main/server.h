@@ -10,6 +10,7 @@
 #ifndef _SERVER_H_
 #define _SERVER_H_
 
+#include <Arduino.h>
 #include <AsyncTCP.h>
 #include <ESPAsyncWebServer.h>
 

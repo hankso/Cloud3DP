@@ -2,59 +2,102 @@
  * File: config.h
  * Authors: Hank <hankso1106@gmail.com>
  * Create: 2020-03-12 21:46:59
+ *
+ * See more in comment strings
  */
 
 #ifndef _CONFIG_H_
 #define _CONFIG_H_
 
-struct config_webserver_t {
-    const char * USER_WS;
-    const char * PASS_WS;
-    const char * USER_WEB;
-    const char * PASS_WEB;
-    const char * VIEW_EDIT;
-    const char * VIEW_FILE;
-    const char * DIR_STATIC;
-    const char * DIR_UPLOAD;
-};
+#include "esp_err.h"
 
-struct config_wifi_t {
-    const char * AP_SSID;
-    const char * AP_PASS;
-          bool   STA_EN;
-    const char * STA_SSID;
-    const char * STA_PASS;
-}
+typedef struct config_webserver_t {
+    const char * WS_NAME;   // Username to access websocket connection
+    const char * WS_PASS;   // Password. Leave it empty("") to disable
+    const char * HTTP_NAME; // Username to access webpage (HTML/JS/CSS)
+    const char * HTTP_PASS; // Password. Leave it empty("") to disable
+    const char * VIEW_EDIT; // Template filename for Online Editor
+    const char * VIEW_FILE; // Template filename for Files Manager
+    const char * DIR_STA;   // Path to static files hosted on STA interface
+    const char * DIR_AP;    // Path to static files hosted on AP interface
+    const char * DIR_DATA;  // Directory to storage data
+} config_web_t;
 
-struct config_application_t {
-          bool   DNS_EN;
-    const char * DNS_HOST;
-          bool   OTA_EN;
-    const char * OTA_URL;
-    const char * PROMPT;
-};
+/* After startup, esp32 will first try to connect to an access point.
+ * On connection fail(no available access point or password mismatch), esp32
+ * will turn into STA_AP mode and establish a hotspot with AP_NAME & AP_PASS.
+ * One can connect to this hotspot and visit http://{AP_HOST}/ap/index.html
+ * to list all access points, select one and connect to it by setting config
+ * value STA_NAME & STA_PASS.
+ */
+typedef struct config_network_t {
+    const char * AP_NAME;   // Hotspot SSID
+    const char * AP_PASS;   // Hotspot password
+    const char * AP_HOST;   // Hotspot IP address
+    const char * STA_NAME;  // BSSID of access point to connect after startup
+    const char * STA_PASS;  // Password for access point
+} config_net_t;
 
-struct config_information_t {
-    const char * NAME;
-    const char * UID;
-    const char * VERSION;
-};
+// For easier managing, Boolean values are stored as "0" or "1"
+typedef struct config_application_t {
+    const char * DNS_RUN;   // Enable mDNS service
+    const char * DNS_HOST;  // redirect http://{DNS_HOST} to http://{AP_HOST}
+    const char * OTA_RUN;   // Enable auto updation checking
+    const char * OTA_URL;   // URL to fetch firmware from
+    const char * PROMPT;    // Console promption string
+} config_app_t;
 
-typedef struct config_t config_t;
+// information are readonly values (after initialization)
+typedef struct config_information_t {
+    const char * NAME;      // Program name
+    const char * UID;       // Unique Serial number
+    const char * VER;       // Firmware & compilation version
+        uint8_t  UART;      // Console UART number
+} config_info_t;
 
-struct config_t {
-    struct config_webserver_t   web;
-    struct config_wifi_t        wifi;
-    struct config_application_t app;
-    const struct config_information_t info;
-};
+// Global instance to get configuration
+typedef struct config_t {
+    config_web_t web;
+    config_net_t net;
+    config_app_t app;
+    config_info_t info;
+} config_t;
 
 extern config_t Config;
 
-extern const char * UUID;
+/* The cfglist is a mapping to flattened Configuration attributes. 
+ * Low level config_get/config_set are actually manipulation on this array.
+ * Therefore, global variable `Config` is just a reference to the cfglist
+ * memory.
+ */
+typedef struct config_entry_t {
+    const char *key;
+    const char * *value;
+} config_entry_t;
 
-bool config_init();
-bool config_load(config_t *cfg = &Config);
-bool config_save(config_t *cfg = &Config);
+extern config_entry_t cfglist[];
+
+bool config_initialize();
+bool config_load();                 // load from nvs flash to Config
+bool config_dump();                 // save Config to nvs flash
+bool config_loads(char *);          // load Config from json
+bool config_dumps(char *);          // dump Config into json
+// Get one config value by key or set one by key & value. When you've set one
+// entry, the result is applies on both Config and NVS flash. You don't need 
+// to call config_load/config_dump to sync between.
+const char * config_get(const char *);
+bool config_set(const char *, const char *);
+
+/* NVS helper functions (without dependency on Arduino.h). These are similar 
+ * like Arduino-ESP32 library `Preference`.
+ */
+esp_err_t config_nvs_init();
+esp_err_t config_nvs_open(const char *, bool ro = false);   // open namespace
+esp_err_t config_nvs_commit();          // must be called after config_nvs_open
+esp_err_t config_nvs_close();           // close with auto commit
+bool config_nvs_remove(const char *);   // remove one entry
+bool config_nvs_clear();                // remove all entries
+void config_nvs_stats();                // get nvs flash detail
+void config_nvs_list();                 // list all entries
 
 #endif // _CONFIG_H_
