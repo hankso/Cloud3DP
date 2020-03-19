@@ -40,7 +40,7 @@ void wifi_initialize() {
     sprintf(SSID, "%s-%s", Config.net.AP_NAME, Config.info.UID);
     WiFi.softAP(SSID, Config.net.AP_PASS, 0, 2);
     printf("You can connect to WiFi hotspot %s\n", SSID);
-    printf("Visit http://%s.\n", WiFi.softAPIP().toString().c_str());
+    printf("Visit http://%s/index.html\n", WiFi.softAPIP().toString().c_str());
 }
 
 void uart_initialize() {
@@ -76,24 +76,24 @@ void twdt_initialize() {
         esp_task_wdt_add(idle0) == ESP_OK && \
         esp_task_wdt_status(idle0) == ESP_OK
     ) {
-        ESP_LOGD(NAME, "Task IDLE0 @ CPU0 subscribed to WDT");
+        ESP_LOGI(TAG, "Task IDLE0 @ CPU0 subscribed to WDT");
     }
     #ifndef CONFIG_FREERTOS_UNICORE
     TaskHandle_t idle1 = xTaskGetIdleTaskHandleForCPU(1);
     if (idle1 && esp_task_wdt_delete(idle1) == ESP_OK) {
-        ESP_LOGD(NAME, "Task IDLE1 @ CPU1 unsubscribed from WDT");
+        ESP_LOGI(TAG, "Task IDLE1 @ CPU1 unsubscribed from WDT");
     }
     #endif // CONFIG_FREERTOS_UNICORE
 #endif // CONFIG_AUTOSTART_ARDUINO & CONFIG_TASK_WDT
 }
 
 void init() {
+    esp_log_level_set(TAG, ESP_LOG_DEBUG);
     uart_initialize();    ESP_LOGI(TAG, "Initializing UART Serial Connection");
     config_initialize();  ESP_LOGI(TAG, "Initializing Configuration");
     twdt_initialize();    ESP_LOGI(TAG, "Initializing Task Watchdog Timer");
     gpio_initialize();    ESP_LOGI(TAG, "Initializing GPIO functions");
     wifi_initialize();    ESP_LOGI(TAG, "Initializing WiFi Connection");
-    server_initialize();  ESP_LOGI(TAG, "Initializing WebServer with HTTP/WS");
     console_initialize(); ESP_LOGI(TAG, "Initializing Command Line Console");
     fflush(stdout);
 }
@@ -102,13 +102,15 @@ void initVariant() {  // testing features. maybe removed in the future
     max6675_init();
 }
 
-void setup() {}
+void setup() {
+    server_loop_begin();
+    console_loop_begin();
+}
 
 void loop() {
     LIGHTBLK(100);
     /* max6675_read(); */
     delay(1000);
-    console_handle_one();
 }
 
 #ifndef CONFIG_AUTOSTART_ARDUINO

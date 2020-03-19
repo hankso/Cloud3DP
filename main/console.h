@@ -7,39 +7,28 @@
 #ifndef _CONSOLE_H_
 #define _CONSOLE_H_
 
-/*
- * Config and init console. console_register_commands is called at the end.
- */
+// Config and init console. commands are registered at the end.
 void console_initialize();
 
-/*
- * (E) parse and Execute the command.
- * Save result in ret and append the command to linenoise's history (default).
- */
-char * console_handle_command(char* cmd, bool history = true);
-void console_handle_command(char *cmd, char *ret, bool history = true);
-
-/*
- * (R) Read from console stream (wait until command input).
+/* (R) Read from console stream (wait until command input).
  * (E) parse and Execute the command (call console_handle_command).
  * (P) then Print the result.
  */
 void console_handle_one();
 
-/*
- * (L) endless Loop of handle_console.
- */
+// (L) endless Loop of console_handle_one.
 void console_handle_loop(void*);
 
-/*
- * Create a xTask of console_handle_loop.
- * Save TaskHandle if parameter pxCreatedTask specified.
- */
+// Create a FreeRTOS Task on console_handle_loop.
 void console_loop_begin(int xCoreID = 1);
 
-/*
- * Stop loopTask created by console_loop_begin (i.e. terminate the xTask).
- */
+// Stop loopTask created by console_loop_begin.
 void console_loop_end();
+
+
+// When calling console_handle_command, remember to free the buffer after usage
+char * console_handle_command(char* cmd, bool hist = true);
+// Save result in buf and append the command to linenoise's history (default).
+void console_handle_command(char *, char *buf, size_t len, bool hist = true);
 
 #endif // _CONSOLE_H

@@ -27,15 +27,14 @@
 #include "config.h"
 #include "globals.h"
 
+#include <Update.h>  // TODO
 #include <FS.h>
 // #include <FFat.h>
 // #define FFS FFat
 #include <SPIFFS.h>  // TODO
 #define FFS SPIFFS
 
-#include <Update.h>  // TODO
-
-void server_initialize() { WebServer.begin(); }
+#include "esp_log.h"
 
 static const char
 *TAG = "Server", *WS = "WebSocket",
@@ -73,7 +72,12 @@ static const char
     "<body>"
     "</html>";
 
-static bool log_request = true;
+void server_loop_begin() {
+    esp_log_level_set(TAG, ESP_LOG_INFO);
+    WebServer.begin();
+}
+
+void server_loop_end() { WebServer.end(); }
 
 inline String jsonify_dir(File dir) {
     String path, type, msg = "";
@@ -93,6 +97,8 @@ inline String jsonify_dir(File dir) {
     file.close();
     return "[" + msg + "]";
 }
+
+static bool log_request = true;
 
 void log_msg(AsyncWebServerRequest *req, const char *msg = "") {
     if (!log_request) return;
@@ -298,81 +304,98 @@ void handle_websocket_message(AsyncWebSocketClient *client, char *data, uint8_t 
 }
 
 void onWebSocket(AsyncWebSocket *server, AsyncWebSocketClient *client, AwsEventType type, void *arg, uint8_t *data, size_t datalen) {
-    const char *host = client->remoteIP().toString().c_str();
-    uint16_t port = client->remotePort();
-    uint32_t cid = client->id();
+    static char header[32];
+    snprintf(header, 32, "ws#%u %s:%d", client->id(),
+             client->remoteIP().toString().c_str(), client->remotePort());
     switch (type) {
     case WS_EVT_CONNECT:
-        ESP_LOGV(WS, "ws#%u %s:%d connected", cid, host, port);
+        ESP_LOGV(WS, "%s connected", header);
         client->ping();
         // server.cleanupClients();
         break;
     case WS_EVT_DISCONNECT:
-        ESP_LOGV(WS, "ws#%u %s:%d disconnected", cid, host, port);
+        ESP_LOGV(WS, "%s disconnected", header);
         break;
     case WS_EVT_ERROR:
-        ESP_LOGI(WS, "ws#%u %s:%d error(%u) %s",
-                 cid, host, port, *((uint16_t *)arg), (char *)data);
+        ESP_LOGI(WS, "%s error(%u) %s", header, *((uint16_t*)arg), (char*)data);
         break;
     case WS_EVT_DATA:
+        uint32_t cid = client->id();
+
         AwsFrameInfo *info = (AwsFrameInfo *)arg;
-        static char * msg = NULL; static uint64_t idx = 0, buflen;
+        static char * msg = NULL;
+        static uint32_t wsid = -1;
+        static size_t idx = 0, buflen = 0;
+
+        if (wsid != -1 && wsid != cid) {
+            ESP_LOGD(WS, "%s error: message buffer busy. Skip", header);
+            break;
+        } else wsid = cid;
         
         if (info->final && info->num == 0) {
             // Message is not fragmented so there's only one frame
-            ESP_LOGD(WS, "ws#%u %s:%d message[%llu]", cid, host, port, info->len);
+            ESP_LOGD(WS, "%s message[%llu]", header, info->len);
             if (info->index == 0) {
                 // We are starting this only frame
-                buflen = ((info->opcode == WS_TEXT) ? 1: 2) * info->len;
-                msg = (char *)malloc(buflen + 1);
+                buflen = ((info->opcode == WS_TEXT) ? 1 : 2) * info->len + 1;
+                msg = (char *)malloc(buflen);
                 if (msg == NULL) break;
                 else idx = 0;
-            } else {
+            } else if (msg != NULL) {
                 // This frame is splitted into packets
                 // do nothing
+            } else {
+                ESP_LOGD(WS, "%s error: lost first packets. Skip", header);
             }
         } else if (info->index == 0) {
             // Message is fragmented. Starting a new frame
-            ESP_LOGD(WS, "ws#%u %s:%d frame%d[%llu]", cid, host, port, info->num, info->len);
-            buflen = ((info->message_opcode == WS_TEXT) ? 1 : 2) * info->len;
+            ESP_LOGD(WS, "%s frame%d[%llu]", header, info->num, info->len);
+            size_t l = ((info->message_opcode == WS_TEXT) ? 1 : 2) * info->len;
             if (info->num == 0) {
                 // Starting the first frame
-                msg = (char *)malloc(buflen + 1);
+                msg = (char *)malloc(l + 1);
                 if (msg == NULL) break;
-                else idx = 0;
-            } else {
+                idx = 0; buflen = l + 1;
+            } else if (msg != NULL) {
                 // Extend buffer for the comming frame
-                char *tmp = (char *)realloc(msg, sizeof(msg) + buflen);
+                char *tmp = (char *)realloc(msg, buflen + l);
                 if (tmp == NULL) break;
-                else msg = tmp;
+                msg = tmp; buflen += l;
+            } else {
+                ESP_LOGD(WS, "%s error: lost first frame. Skip", header);
+                break;
             }
-        } else {
+        } else if (msg != NULL) {
             // Message is fragmented. Current frame is splitted
             // do nothing
+        } else {
+            ESP_LOGD(WS, "%s error: lost message head. Skip", header);
+            break;
         }
 
         // Save/append packets to message buffer
         if (info->opcode == WS_TEXT) {
-            idx += sprintf(msg + idx, (char *)data);
+            idx += snprintf(msg + idx, buflen - idx, (char *)data);
         } else {
             for (size_t i = 0; i < datalen; i++) {
-                idx += sprintf(msg + idx, "%02x", data[i]);
+                idx += snprintf(msg + idx, buflen - idx, "%02x", data[i]);
             }
         }
-        ESP_LOGV(WS, "ws#%u %s:%d *packets[%llu-%llu]", cid, host, port, info->index, info->index + datalen);
+        ESP_LOGV(WS, "%s >packets[%llu-%llu]",
+                 header, info->index, info->index + datalen);
 
         if (info->index + datalen == info->len) {
             // Current frame end
             if (info->final) {
                 // All message buffered
+                wsid = -1; idx = buflen = 0;
                 handle_websocket_message(client, msg, info->message_opcode);
-                free(msg); idx = 0;
+                free(msg);
             } else {
                 // Waiting for next frame
                 // do nothing
             }
         }
-
         break;
     }
 }
@@ -399,7 +422,7 @@ void onWebSocket(AsyncWebSocket *server, AsyncWebSocketClient *client, AwsEventT
  * D: num=2, final=true,  opcode=WS_CONTINUATION, index=0, len=10, datalen=3
  * E: num=2, final=true,  opcode=WS_CONTINUATION, index=3, len=10, datalen=7
  */
-void onWebSocketData(AwsFrameInfo *info, char *data, size_t datalen) {
+void onWebSocketData(uint32_t cid, AwsFrameInfo *info, char *data, size_t datalen) {
 
 }
 

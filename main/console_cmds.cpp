@@ -325,10 +325,10 @@ void version_info() {
     printf(
         "IDF Version: %s\n"
         "Chip info:\n"
-        "\tmodel: %s\n"
-        "\tcores: %d\n"
-        "\trevision number: %d"
-        "\tfeature: %s%s%s/%s-Flash: %.1f MB\n",
+        " model: %s\n"
+        " cores: %d\n"
+        " revision number: %d\n"
+        " feature: %s%s%s/%s-Flash: %.1f MB\n",
         esp_get_idf_version(),
         info.model == CHIP_ESP32 ? "ESP32" : "???",
         info.cores, info.revision,
@@ -344,20 +344,19 @@ void version_info() {
 void summary() {
     multi_heap_info_t info;
     heap_caps_get_info(&info, MALLOC_CAP_INTERNAL);
-    float
-        mfree = info.total_free_bytes,
-        mallo = info.total_allocated_bytes,
-        mrate = mfree / (mfree + mallo) * 100;
+    uint32_t mfree = info.total_free_bytes, mallo = info.total_allocated_bytes;
+    float mrate = 100.0 * mfree / (mfree + mallo);
     uint8_t mac1[6], mac2[6];
     esp_read_mac(mac1, ESP_MAC_WIFI_STA);
     esp_read_mac(mac2, ESP_MAC_WIFI_SOFTAP);
     char smac1[18], smac2[18];
     for (uint8_t i = 0; i < 6; i++) {
-        sprintf(smac1, "%s%02x", i ? ":" : "", mac1[i]);
-        sprintf(smac2, "%s%02x", i ? ":" : "", mac2[i]);
+        sprintf(smac1 + strlen(smac1), "%s%02x", i ? ":" : "", mac1[i]);
+        sprintf(smac2 + strlen(smac2), "%s%02x", i ? ":" : "", mac2[i]);
     }
 
     printf("ESP free memory:  %.2f KB, %d%%\n", mfree / 1024.0, mrate);
+    printf("ESP total memory: %.2f KB, %d%%\n", mallo / 1024.0, mrate);
     printf("WiFi status:      %s\n", "TODO");
     printf("STA MAC address:  %s\n", smac1);
     printf("AP  MAC address:  %s\n", smac2);
@@ -385,23 +384,26 @@ esp_console_cmd_t cmd_utils_tasks = {
     .help = "Get information about running RTOS tasks",
     .hint = NULL,
     .func = [](int argc, char **argv) -> int {
-#ifdef CONFIG_FREERTOS_USE_STATS_FORMATTING_FUNCTIONS
+#if defined(CONFIG_FREERTOS_USE_TRACE_FACILITY) && \
+    defined(CONFIG_FREERTOS_USE_STATS_FORMATTING_FUNCTIONS)
         const size_t task_bytes = 40;
         char *taskstr = (char *)malloc(uxTaskGetNumberOfTasks() * task_bytes);
         if (taskstr == NULL) {
             ESP_LOGE(NAME, "allocation for tasks list failed");
             return 1;
         }
-        vTaskList(taskstr);
         printf("\n"
             "Task Name\tStatus\tPrio\tHWM\tTask#"
     #ifdef CONFIG_FREERTOS_VTASKLIST_INCLUDE_COREID
             "\tAffinity"
     #endif
-            "\n%s\n", taskstr);
+            "\n");
+        vTaskList(taskstr);
+        printf("%s\n", taskstr);
         free(taskstr);
-#else // CONFIG_FREERTOS_USE_STATS_FORMATTING_FUNCTIONS
-        ESP_LOGE(NAME, "Unsupported command! Enable `%s` in sdkconfig.",
+#else
+        ESP_LOGE(NAME, "Unsupported command! Enable `%s`&`%s` in sdkconfig.",
+                 "CONFIG_FREERTOS_USE_TRACE_FACILITY",
                  "CONFIG_FREERTOS_USE_STATS_FORMATTING_FUNCTIONS");
 #endif
         return 0;
@@ -431,12 +433,17 @@ esp_console_cmd_t cmd_utils_load = {
             ESP_LOGE(NAME, "History file `%s` does not exists", fn);
             return 1;
         } else file.close();
-        char *tmp = (char *)malloc(strlen(fn) + 7 + 1);
+        char *mountpoint = "/spiffs";
+        uint8_t len = strlen(fn) + strlen(mountpoint);
+        char *tmp = (char *)malloc(len + 1);
         if (tmp == NULL) {
-            ESP_LOGE(NAME, "Cannot alloc memory for filename. Try later");
+            ESP_LOGE(NAME, "Cannot allocate memory for filename. Try later");
             return 1;
-        } else sprintf(tmp, "/spiffs%s", fn);
-        int ret = linenoiseHistoryLoad(fn);
+        } else {
+            snprintf(tmp, len + 1, "%s%s", mountpoint, fn);
+            ESP_LOGE(NAME, "Loading history file %s", tmp);
+        }
+        int ret = linenoiseHistoryLoad(tmp);
         free(tmp); return ret;
     },
     .argtable = &hist_args
@@ -456,12 +463,17 @@ esp_console_cmd_t cmd_utils_save = {
             ESP_LOGE(NAME, "Invalid filename: %s is directory", fn);
             file.close(); return 1;
         } else file.close();
-        char *tmp = (char *)malloc(strlen(fn) + 7 + 1);
+        char *mountpoint = "/spiffs";
+        uint8_t len = strlen(fn) + strlen(mountpoint);
+        char *tmp = (char *)malloc(len + 1);
         if (tmp == NULL) {
-            ESP_LOGE(NAME, "Cannot alloc memory for filename. Try later");
+            ESP_LOGE(NAME, "Cannot allocate memory for filename. Try later");
             return 1;
-        } else sprintf(tmp, "/spiffs%s", fn);
-        int ret = linenoiseHistorySave(fn);
+        } else {
+            snprintf(tmp, len + 1, "%s%s", mountpoint, fn);
+            ESP_LOGI(NAME, "Saving history file %s". tmp);
+        }
+        int ret = linenoiseHistorySave(tmp);
         free(tmp); return ret;
     },
     .argtable = &hist_args
@@ -474,28 +486,30 @@ esp_console_cmd_t cmd_utils_list = {
     .func = [](int argc, char **argv) -> int {
         uint8_t idx, num = 0;
         const esp_partition_t * parts[16], *part, *tmp;
+        esp_partition_type_t type[2] = {
+            ESP_PARTITION_TYPE_DATA, ESP_PARTITION_TYPE_APP
+        };
         esp_partition_iterator_t iter;
-        uint8_t type = ESP_PARTITION_TYPE_DATA;
-        while (type >= 0) {
-            iter = esp_partition_find(
-                (esp_partition_type_t)type--,
-                ESP_PARTITION_SUBTYPE_ANY, NULL);
+        for (uint8_t i = 0; i < 2; i++) {
+            iter = esp_partition_find(type[i], ESP_PARTITION_SUBTYPE_ANY, NULL);
             while (iter != NULL && num < 16) {
                 part = esp_partition_get(iter);
+                ESP_LOGE(TAG, "%d: %s", num, part->label);
                 for (idx = 0; idx <= num; idx++) {
                     if (parts[idx]->address < part->address) {
                         tmp = parts[idx]; parts[idx] = part; part = tmp;
                     }
                 }
                 parts[num++] = part;
+                ESP_LOGE(TAG, "Added");
                 iter = esp_partition_next(iter);
             }
+            esp_partition_iterator_release(iter);
         }
-        esp_partition_iterator_release(iter);
         if (num) {
             printf("LabelName\t  Type\tSubType\tOffset\tSize\tEncryption\n");
         }
-        while (num--) {
+        while (num-- > 0) {
             part = parts[num];
             printf("%.16s  %s\t%d\t0x%06x\t0x%06x\t%s\n",
                    part->label, part->type ? "data" : "app", part->subtype,

@@ -14,7 +14,8 @@
 #include <AsyncTCP.h>
 #include <ESPAsyncWebServer.h>
 
-void server_initialize();        // entry point (i.e. WebServer.begin)
+void server_loop_begin();   // entry point (i.e. WebServer.begin)
+void server_loop_end();
 
 class WebServerClass {
 private:

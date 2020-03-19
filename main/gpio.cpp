@@ -30,7 +30,7 @@ void LIGHTOFF() { gpio_set_level(PIN_BLINK, 0); }
 
 void LIGHTBLK(uint32_t ms, uint8_t n) {
     while (n--) {
-        LIGHTON();  vTaskDelay(ms / portTICK_RATE_MS);
-        LIGHTOFF(); vTaskDelay(ms / portTICK_RATE_MS);
+        LIGHTON();  vTaskDelay(ms / portTICK_PERIOD_MS);
+        LIGHTOFF(); vTaskDelay(ms / portTICK_PERIOD_MS);
     }
 }

@@ -120,7 +120,7 @@ static uint16_t numcfg = sizeof(cfglist) / sizeof(config_entry_t);
 
 // nvs helper functions
 bool _nvs_set_str(const char *, const char *, bool commit = true);
-bool _nvs_get_str(const char *, char *);
+bool _nvs_get_str(const char *, char *, size_t);
 bool _nvs_load_str(const char *, const char **);
 
 int16_t config_index(const char *key) {
@@ -191,11 +191,12 @@ void json_parse_object_recurse(
         }
 
         // resolve key string with parent's name
-        size_t len = strlen(prefix);
-        char *key = (char *)malloc(strlen(item->string) + (len?(len + 2):1));
+        uint8_t plen = strlen(prefix);
+        uint8_t slen = strlen(item->string) + (plen ? plen + 1 : 0) + 1;
+        char *key = (char *)malloc(slen);
         if (key == NULL) return;
-        if (len) sprintf(key, "%s.%s", prefix, item->string);
-        else     sprintf(key, item->string);
+        if (plen) snprintf(key, slen, "%s.%s", prefix, item->string);
+        else      snprintf(key, slen, item->string);
 
         (*cb)(key, item);
 
@@ -221,20 +222,22 @@ bool config_loads(const char *json) {
     }
 }
 
-bool config_dumps(char * buffer) {
+bool config_dumps(char *buffer, uint8_t maxlen) {
     cJSON *obj = cJSON_CreateObject();
     for (uint16_t i = 0; i < numcfg; i++) {
         cJSON_AddStringToObject(obj, cfglist[i].key, *cfglist[i].value);
     }
     char *rendered = cJSON_Print(obj);
-    if (strlen(rendered) > sizeof(buffer)) {
-        char *tmp = (char *)realloc(buffer, strlen(rendered) + 1);
-        if (tmp != NULL) buffer = tmp;
+    uint8_t len = strlen(rendered) + 1;
+    if (len > maxlen) {
+        char *tmp = (char *)realloc(buffer, len);
+        if (tmp == NULL) return false;
+        else buffer = tmp;
     }
-    size_t len = snprintf(buffer, sizeof(buffer), rendered);
+    snprintf(buffer, len, rendered);
     free(rendered);
     cJSON_Delete(obj);
-    return len <= sizeof(buffer);
+    return buffer;
 }
 
 /******************************************************************************
@@ -255,6 +258,7 @@ static struct {
 
 bool config_initialize() {
     config_nvs_init();
+    esp_log_level_set(TAG, ESP_LOG_WARN);
 
     // load readonly values
     if (config_nvs_open("data", true) == ESP_OK) {
@@ -271,7 +275,7 @@ bool config_initialize() {
         if (err) {
             ESP_LOGE(TAG, "get u32 `counter` fail: %s", esp_err_to_name(err));
         }
-        ESP_LOGI(TAG, "Current run times: %u", ++counter);
+        printf("Current run times: %u\n", ++counter);
         err = nvs_set_u32(nvs_st.handle, "counter", counter);
         if (err) {
             ESP_LOGE(TAG, "set u32 `counter` fail: %s", esp_err_to_name(err));
@@ -406,7 +410,7 @@ void config_nvs_list() {
     }
     while (iter != NULL) {
         nvs_entry_info(iter, &info);
-        printf("\tKey: `%s`, value: `%s`\n", info.key, config_get(info.key));
+        printf(" Key: %.16s value: `%s`\n", info.key, config_get(info.key));
         iter = nvs_entry_next(iter);
     }
     nvs_release_iterator(iter);
@@ -416,7 +420,7 @@ void config_nvs_list() {
         printf("Namespace: config\n");
     }
     for (uint16_t i = 0; i < numcfg; i++) {
-        printf("\tKey: `%s`, value: `%s`\n", cfglist[i].key, *cfglist[i].value);
+        printf(" Key: `%s`, value: `%s`\n", cfglist[i].key, *cfglist[i].value);
     }
 #endif
 }
@@ -434,10 +438,10 @@ void config_nvs_stats() {
     }
     printf(
         "NVS Partition Status:\n"
-        "\tUsed: %d entries\n"
-        "\tFree: %d entries\n"
-        "\tNamespaces: %d\n"
-        "\tTotal: %d entries\n",
+        " Used: %d entries\n"
+        " Free: %d entries\n"
+        " Namespaces: %d\n"
+        " Total: %d entries\n",
         nvs_stats.used_entries, nvs_stats.free_entries,
         nvs_stats.namespace_count, nvs_stats.total_entries
     );
@@ -469,14 +473,13 @@ bool _nvs_load_str(const char *key, const char * *ptr) {
     return err == ESP_OK;
 }
 
-bool _nvs_get_str(const char *key, char *val) {
+bool _nvs_get_str(const char *key, char *val, size_t maxlen) {
     size_t len = 0;
     esp_err_t err = nvs_get_str(nvs_st.handle, key, NULL, &len);
     if (err) {
         ESP_LOGE(TAG, "get `%s` length fail: %s", key, esp_err_to_name(err));
         return false;
     }
-    size_t maxlen = sizeof(val);
     if (len > maxlen) {
         char *tmp = (char *)realloc(val, len);
         if (tmp == NULL) {
