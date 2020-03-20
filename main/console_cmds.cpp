@@ -7,12 +7,12 @@
  *  
  */
 
-#include "console_cmds.h"
+#include "console.h"
 #include "config.h"
+#include "globals.h"
 
 #include "esp_log.h"
 #include "esp_sleep.h"
-#include "esp_system.h"
 #include "esp_console.h"
 #include "esp_ota_ops.h"
 #include "rom/uart.h"
@@ -319,54 +319,11 @@ bool ota_update_from_url(char *url) {
  * Utilities commands
  */
 
-void version_info() {
-    esp_chip_info_t info;
-    esp_chip_info(&info);
-    printf(
-        "IDF Version: %s\n"
-        "Chip info:\n"
-        " model: %s\n"
-        " cores: %d\n"
-        " revision number: %d\n"
-        " feature: %s%s%s/%s-Flash: %.1f MB\n",
-        esp_get_idf_version(),
-        info.model == CHIP_ESP32 ? "ESP32" : "???",
-        info.cores, info.revision,
-        info.features & CHIP_FEATURE_WIFI_BGN ? "/802.11bgn" : "",
-        info.features & CHIP_FEATURE_BLE ? "/BLE" : "",
-        info.features & CHIP_FEATURE_BT ? "/BT" : "",
-        info.features & CHIP_FEATURE_EMB_FLASH ? "Embedded" : "External",
-        spi_flash_get_chip_size() / (1024.0 * 1024)
-    );
-    printf("Firmware Version: %s-%s\n", Config.info.NAME, Config.info.VER);
-}
-
-void summary() {
-    multi_heap_info_t info;
-    heap_caps_get_info(&info, MALLOC_CAP_INTERNAL);
-    uint32_t mfree = info.total_free_bytes, mallo = info.total_allocated_bytes;
-    float mrate = 100.0 * mfree / (mfree + mallo);
-    uint8_t mac1[6], mac2[6];
-    esp_read_mac(mac1, ESP_MAC_WIFI_STA);
-    esp_read_mac(mac2, ESP_MAC_WIFI_SOFTAP);
-    char smac1[18], smac2[18];
-    for (uint8_t i = 0; i < 6; i++) {
-        sprintf(smac1 + strlen(smac1), "%s%02x", i ? ":" : "", mac1[i]);
-        sprintf(smac2 + strlen(smac2), "%s%02x", i ? ":" : "", mac2[i]);
-    }
-
-    printf("ESP free memory:  %.2f KB, %d%%\n", mfree / 1024.0, mrate);
-    printf("ESP total memory: %.2f KB, %d%%\n", mallo / 1024.0, mrate);
-    printf("WiFi status:      %s\n", "TODO");
-    printf("STA MAC address:  %s\n", smac1);
-    printf("AP  MAC address:  %s\n", smac2);
-}
-
 esp_console_cmd_t cmd_utils_summary = {
     .command = "summary",
     .help = "Print summary of current status",
     .hint = NULL,
-    .func = [](int argc, char **argv) -> int { summary(); return 0; },
+    .func = [](int argc, char **argv) -> int { return memory_info(); },
     .argtable = NULL
 };
 
@@ -374,7 +331,7 @@ esp_console_cmd_t cmd_utils_version = {
     .command = "version",
     .help = "Get version of chip and SDK",
     .hint = NULL,
-    .func = [](int argc, char **argv) -> int { version_info(); return 0; },
+    .func = [](int argc, char **argv) -> int { return version_info(); },
     .argtable = NULL
 };
 
@@ -383,31 +340,7 @@ esp_console_cmd_t cmd_utils_tasks = {
     .command = "lstask",
     .help = "Get information about running RTOS tasks",
     .hint = NULL,
-    .func = [](int argc, char **argv) -> int {
-#if defined(CONFIG_FREERTOS_USE_TRACE_FACILITY) && \
-    defined(CONFIG_FREERTOS_USE_STATS_FORMATTING_FUNCTIONS)
-        const size_t task_bytes = 40;
-        char *taskstr = (char *)malloc(uxTaskGetNumberOfTasks() * task_bytes);
-        if (taskstr == NULL) {
-            ESP_LOGE(NAME, "allocation for tasks list failed");
-            return 1;
-        }
-        printf("\n"
-            "Task Name\tStatus\tPrio\tHWM\tTask#"
-    #ifdef CONFIG_FREERTOS_VTASKLIST_INCLUDE_COREID
-            "\tAffinity"
-    #endif
-            "\n");
-        vTaskList(taskstr);
-        printf("%s\n", taskstr);
-        free(taskstr);
-#else
-        ESP_LOGE(NAME, "Unsupported command! Enable `%s`&`%s` in sdkconfig.",
-                 "CONFIG_FREERTOS_USE_TRACE_FACILITY",
-                 "CONFIG_FREERTOS_USE_STATS_FORMATTING_FUNCTIONS");
-#endif
-        return 0;
-    },
+    .func = [](int argc, char **argv) -> int { return task_info(); },
     .argtable = NULL
 };
 
@@ -483,41 +416,7 @@ esp_console_cmd_t cmd_utils_list = {
     .command = "lspart",
     .help = "List information of partitions in flash",
     .hint = NULL,
-    .func = [](int argc, char **argv) -> int {
-        uint8_t idx, num = 0;
-        const esp_partition_t * parts[16], *part, *tmp;
-        esp_partition_type_t type[2] = {
-            ESP_PARTITION_TYPE_DATA, ESP_PARTITION_TYPE_APP
-        };
-        esp_partition_iterator_t iter;
-        for (uint8_t i = 0; i < 2; i++) {
-            iter = esp_partition_find(type[i], ESP_PARTITION_SUBTYPE_ANY, NULL);
-            while (iter != NULL && num < 16) {
-                part = esp_partition_get(iter);
-                ESP_LOGE(TAG, "%d: %s", num, part->label);
-                for (idx = 0; idx <= num; idx++) {
-                    if (parts[idx]->address < part->address) {
-                        tmp = parts[idx]; parts[idx] = part; part = tmp;
-                    }
-                }
-                parts[num++] = part;
-                ESP_LOGE(TAG, "Added");
-                iter = esp_partition_next(iter);
-            }
-            esp_partition_iterator_release(iter);
-        }
-        if (num) {
-            printf("LabelName\t  Type\tSubType\tOffset\tSize\tEncryption\n");
-        }
-        while (num-- > 0) {
-            part = parts[num];
-            printf("%.16s  %s\t%d\t0x%06x\t0x%06x\t%s\n",
-                   part->label, part->type ? "data" : "app", part->subtype,
-                   part->address, part->size,
-                   part->encrypted ? "true" : "false");
-        }
-        return 0;
-    },
+    .func = [](int argc, char **argv) -> int { return partition_info(); },
     .argtable = NULL
 };
 
@@ -553,7 +452,30 @@ esp_console_cmd_t cmd_config_stats = {
     .command = "lsnvs",
     .help = "Get NVS flash partition entries details",
     .hint = NULL,
-    .func = [](int arg, char **argv) -> int { config_nvs_stats(); return 0; }
+    .func = [](int arg, char **argv) -> int { config_nvs_stats(); return 0; },
+    .argtable = NULL
+};
+
+esp_console_cmd_t cmd_config_get = {
+    .command = "get",
+    .help = "Get configuration value by key name",
+    .hint = NULL,
+    .func = [](int arg, char **argv) -> int {
+        return 1;
+        printf("%s\n", config_get("asdf"));
+    },
+    .argtable = NULL
+};
+
+esp_console_cmd_t cmd_config_set = {
+    .command = "set",
+    .help = "Set configuration key to value",
+    .hint = NULL,
+    .func = [](int arg, char **argv) -> int {
+        return 1;
+        printf("%s\n", config_get("asdf"));
+    },
+    .argtable = NULL
 };
 
 /******************************************************************************
@@ -586,12 +508,15 @@ void console_register_config() {
     ESP_ERROR_CHECK( esp_console_cmd_register(&cmd_config_dump) );
     ESP_ERROR_CHECK( esp_console_cmd_register(&cmd_config_list) );
     ESP_ERROR_CHECK( esp_console_cmd_register(&cmd_config_stats) );
+    ESP_ERROR_CHECK( esp_console_cmd_register(&cmd_config_get) );
+    ESP_ERROR_CHECK( esp_console_cmd_register(&cmd_config_set) );
 }
 
 void console_register_commands() {
+    esp_log_level_set(NAME, ESP_LOG_INFO);
+    ESP_ERROR_CHECK( esp_console_register_help_command() );
     console_register_wifi();
     console_register_sys();
     console_register_utils();
     console_register_config();
-    ESP_ERROR_CHECK( esp_console_register_help_command() );
 }

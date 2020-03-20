@@ -39,8 +39,9 @@ void wifi_initialize() {
     char SSID[strlen(Config.net.AP_NAME) + strlen(Config.info.UID) + 2];
     sprintf(SSID, "%s-%s", Config.net.AP_NAME, Config.info.UID);
     WiFi.softAP(SSID, Config.net.AP_PASS, 0, 2);
-    printf("You can connect to WiFi hotspot %s\n", SSID);
+    printf("You can connect to WiFi hotspot %d: `%s`\n", strlen(SSID), SSID);
     printf("Visit http://%s/index.html\n", WiFi.softAPIP().toString().c_str());
+    LIGHTBLK(10, 10);
 }
 
 void uart_initialize() {
@@ -65,25 +66,26 @@ void uart_initialize() {
 }
 
 void twdt_initialize() {
+    // Idle tasks are created on each core automatically by RTOS scheduler
+    // with the lowest possible priority (0). Our tasks have higher priority,
+    // thus leaving almost no time for idle tasks to run. Disable WDT on them.
 #if defined(CONFIG_AUTOSTART_ARDUINO)
-    enableCore0WDT();
+    disableCore0WDT();
     #ifndef CONFIG_FREERTOS_UNICORE
     disableCore1WDT();
     #endif // CONFIG_FREERTOS_UNICORE
 #elif defined(CONFIG_TASK_WDT)
-    TaskHandle_t idle0 = xTaskGetIdleTaskHandleForCPU(0);
-    if (idle0 && \
-        esp_task_wdt_add(idle0) == ESP_OK && \
-        esp_task_wdt_status(idle0) == ESP_OK
-    ) {
-        ESP_LOGI(TAG, "Task IDLE0 @ CPU0 subscribed to WDT");
-    }
     #ifndef CONFIG_FREERTOS_UNICORE
-    TaskHandle_t idle1 = xTaskGetIdleTaskHandleForCPU(1);
-    if (idle1 && esp_task_wdt_delete(idle1) == ESP_OK) {
-        ESP_LOGI(TAG, "Task IDLE1 @ CPU1 unsubscribed from WDT");
-    }
+    uint8_t num = 2;
+    #else
+    uint8_t num = 1;
     #endif // CONFIG_FREERTOS_UNICORE
+    while (num--) {
+        TaskHandle_t idle = xTaskGetIdleTaskHandleForCPU(num);
+        if (idle && esp_task_wdt_delete(idle) == ESP_OK) {
+            ESP_LOGI(TAG, "Task IDLE%d @ CPU%d removed from WDT", num, num);
+        }
+    }
 #endif // CONFIG_AUTOSTART_ARDUINO & CONFIG_TASK_WDT
 }
 
@@ -107,28 +109,32 @@ void setup() {
     console_loop_begin();
 }
 
+/*
+ * Task list:
+ *  WiFi/WebServer Core 1
+ *  Console (command dispatcher) Core 1
+ *  GCode parser Core 0
+ */
+
 void loop() {
     LIGHTBLK(100);
     /* max6675_read(); */
-    delay(1000);
+    delay(5000);
+    
 }
 
 #ifndef CONFIG_AUTOSTART_ARDUINO
 void loopTask(void *pvParameters) {
     while (true) {
+        loop();
 #ifdef CONFIG_TASK_WDT
         esp_task_wdt_reset();
 #endif
-        loop();
     }
 }
 
 void app_main() {
     init(); initVariant(); setup();
-#ifdef CONFIG_FREERTOS_UNICORE
-    xTaskCreate(loopTask, "loopTask", 8192, NULL, 1, NULL);
-#else
-    xTaskCreatePinnedToCore(loopTask, "loopTask", 8192, NULL, 1, NULL, 0);
-#endif // CONFIG_FREERTOS_UNICORE
+    xTaskCreate(loopTask, "main-loop", 8192, NULL, 2, NULL);
 }
 #endif // CONFIG_AUTOSTART_ARDUINO

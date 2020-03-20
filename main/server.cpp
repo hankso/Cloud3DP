@@ -2,24 +2,6 @@
  * File: server.cpp
  * Authors: Hank <hankso1106@gmail.com>
  * Create: 2019-05-27 15:29:05
- *
- * STA API list:
- *  Name    Method  Description
- *  /ws     POST    websocket connection point
- *  /temp   GET     return json string containing temprature values
- *  /cmd    POST    TODO
- *
- * AP API list:
- *  Name    Method  Description
- *  /config GET     TODO
- *  /config POST    TODO
- *  /update GET     Updation guide page
- *  /update POST    upload compiled binary firmware to OTA flash partition
- *  /list   GET     do SPIFFS listdir with parameter `?dir=/pathname`
- *  /edit   GET     Online editor page
- *  /edit   POST    upload file to SPIFFS flash partition
- *  /edit   PUT     create file/dir
- *  /edit   DELETE  delete file/dir
  */
 
 #include "server.h"
@@ -39,6 +21,7 @@
 static const char
 *TAG = "Server", *WS = "WebSocket",
 *ERROR_HTML =
+    "<!DOCTYPE html>"
     "<html>"
     "<head>"
         "<title>Page not found</title>"
@@ -51,6 +34,7 @@ static const char
     "</body>"
     "</html>",
 *CONFIG_HTML =
+    "<!DOCTYPE html>"
     "<html>"
     "<head>"
         "<title>Configuration</title>"
@@ -60,6 +44,7 @@ static const char
     "</body>"
     "</html>",
 *UPDATE_HTML =
+    "<!DOCTYPE html>"
     "<html>"
     "<head>"
         "<title>OTA Updation</title>"
@@ -67,7 +52,7 @@ static const char
     "<body>"
         "<form action='/update' method='post' enctype='multipart/form-data'>"
             "<input type='file' name='update'>"
-            "<input type='submit' value='Update'>"
+            "<input type='submit' value='Upload' onclick='this.disabled=true'>"
         "</form>"
     "<body>"
     "</html>";
@@ -109,6 +94,15 @@ void log_msg(AsyncWebServerRequest *req, const char *msg = "") {
  * HTTP & static files API
  */
 
+void onCommand(AsyncWebServerRequest *request) {
+    log_msg(request);
+    if (!request->hasParam("cmd")) {
+        request->send(400, "text/html", "Invalid parameter");
+        return;
+    }
+    printf("Command: %s\n", request->getParam("cmd")->value());
+}
+
 void onUpdate(AsyncWebServerRequest *request) {
     log_msg(request);
     request->send(200, "text/html", UPDATE_HTML);
@@ -145,34 +139,34 @@ void onUpdatePost(AsyncWebServerRequest *request, String filename, size_t index,
     LIGHTOFF();
 }
 
-void onUpdateDone(AsyncWebServerRequest *request) {
-    AsyncWebServerResponse *response = request->beginResponse(
-        200, "text/plain", Update.hasError() ? "FAIL" : "OK. Rebooting...");
-    response->addHeader("Connection", "close");
-    request->send(response);
-    if (!Update.hasError()) ESP.restart();
+void onConfig(AsyncWebServerRequest *request) {
+    log_msg(request);
+    request->send(200, "text/html", CONFIG_HTML);
 }
 
-void onList(AsyncWebServerRequest *request) {
-    log_msg(request);
-    String path = request->hasParam("path") ? \
-                  request->getParam("path")->value() : "/";
-    if (!path.startsWith("/")) path = '/' + path;
-    File root = FFS.open(path);
-    if (!root) {
-        request->send(404, "text/plain", "Dir does not exists.");
-    } else if (!root.isDirectory()) {
-        request->send(400, "text/plain", "No more files under a file.");
-        // request->redirect(path);
-    } else {
-        request->send(200, "application/json", jsonify_dir(root));
-    }
-    root.close();
+void onConfigPost(AsyncWebServerRequest *request, String filename, size_t index, uint8_t *data, size_t len, bool final) {
+    printf("index: %lu, len: %lu, final: %d, data: %s\n", index, len, final, (char *)data);
 }
 
 void onEdit(AsyncWebServerRequest *request) {
     log_msg(request);
-    if (!request->hasParam("path")) {
+    if (request->hasParam("list")) {
+        String path = request->getParam("list")->value();
+        if (!path.startsWith("/")) {
+            return request->send(400, "text/plain", "Invalid path name.");
+        }
+        File root = FFS.open(path);
+        if (!root) {
+            request->send(400, "text/plain", "Dir does not exists.");
+        } else if (!root.isDirectory()) {
+            request->send(404, "text/plain", "No more files under a file.");
+            // request->redirect(path);
+        } else {
+            request->send(200, "application/json", jsonify_dir(root));
+        }
+        root.close();
+        return;
+    } else if (!request->hasParam("path")) {
         return request->send(400, "text/plain", "No filename specified.");
     }
     String path = request->getParam("path")->value();
@@ -275,6 +269,11 @@ void onUploadStrict(AsyncWebServerRequest *request, String filename, size_t inde
 }
 
 void onError(AsyncWebServerRequest *request) {
+    if (request->method() == HTTP_OPTIONS) return request->send(200);
+    return request->send(404, "text/html", ERROR_HTML);
+}
+
+void onErrorFileManager(AsyncWebServerRequest *request) {
     if (request->method() == HTTP_OPTIONS) return request->send(200);
     String path = request->url();
     File file = FFS.open(path);
@@ -435,9 +434,10 @@ void WebServerClass::begin() {
     if (_started) return _server.begin();
     FFS.begin();
     _server.reset();
-    register_http_api();
-    register_websocket();
     register_statics();
+    register_ws_api();
+    register_ap_api();
+    register_sta_api();
     DefaultHeaders::Instance()
         .addHeader("Access-Control-Allow-Origin", "*");
     _server.begin();
@@ -454,41 +454,56 @@ inline void max6675_value_wrapper(AsyncWebServerRequest *request) {
     LIGHTOFF();
 }
 
-void WebServerClass::register_http_api() {
+void WebServerClass::register_sta_api() {
     _server.on("/temp",   HTTP_GET,  max6675_value_wrapper);
+    _server.on("/cmd",    HTTP_POST, onCommand);
 
-    _server.on("/update", HTTP_GET,  onUpdate);
-    _server.on("/update", HTTP_POST, onUpdateDone, onUpdatePost);
-    
-    _server.on("/list",   HTTP_GET,  onList);
-    _server.on("/edit",   HTTP_GET,  onEdit);
-    _server.on("/edit",   HTTP_ANY,  onCreate);  // Fix::HTTP_PUT
-    _server.on("/edit",   HTTP_ANY,  onDelete);  // Fix::HTTP_DELETE
-    _server.on("/edit",   HTTP_POST, [](AsyncWebServerRequest *request){
-        request->send(200, "text/plain", "Uploaded");
-    }, onUpload);
+    _server.serveStatic("/", FFS, Config.web.DIR_STA)
+        .setDefaultFile("index.html")
+        .setFilter(ON_STA_FILTER);
 }
 
-void WebServerClass::register_websocket() {
+void WebServerClass::register_ap_api() {
+    _server.on("/update", HTTP_GET,  onUpdate).setFilter(ON_AP_FILTER);
+    _server.on("/update", HTTP_POST, [](AsyncWebServerRequest *request){
+        AsyncWebServerResponse *response = request->beginResponse(
+            200, "text/plain", Update.hasError() ? "FAIL" : "OK. Rebooting");
+        response->addHeader("Connection", "close");
+        request->send(response);
+        if (!Update.hasError()) ESP.restart();
+    }, onUpdatePost).setFilter(ON_AP_FILTER);
+
+    _server.on("/config", HTTP_GET,  onConfig).setFilter(ON_AP_FILTER);
+    _server.on("/config", HTTP_POST, [](AsyncWebServerRequest *request){
+        request->send(200, "text/plain", "OK");
+    }, onConfigPost).setFilter(ON_AP_FILTER);
+
+    // Use HTTP_ANY for compatibility with HTTP_PUT/HTTP_DELETE
+    _server.on("/edit",   HTTP_GET,  onEdit).setFilter(ON_AP_FILTER);
+    _server.on("/edit",   HTTP_ANY,  onCreate).setFilter(ON_AP_FILTER);
+    _server.on("/edit",   HTTP_ANY,  onDelete).setFilter(ON_AP_FILTER);
+    _server.on("/edit",   HTTP_POST, [](AsyncWebServerRequest *request){
+        request->send(200, "text/plain", "Uploaded");
+    }, onUpload).setFilter(ON_AP_FILTER);
+
+    // _server.rewrite("/index.html", "/ap/index.html").setFilter(ON_AP_FILTER);
+    // _server.rewrite("/", "index.html");
+    _server.serveStatic("/ap/", FFS, Config.web.DIR_AP)
+        .setDefaultFile("index.html")
+        .setCacheControl("max-age=3600")
+        .setAuthentication(Config.web.HTTP_NAME, Config.web.HTTP_PASS)
+        .setFilter(ON_AP_FILTER);
+}
+
+void WebServerClass::register_ws_api() {
     _wsocket.onEvent(onWebSocket);
     _wsocket.setAuthentication(Config.web.WS_NAME, Config.web.WS_PASS);
     _server.addHandler(&_wsocket);
 }
 
 void WebServerClass::register_statics() {
-    // _server.rewrite("/", "index.html");
-
-    _server.rewrite("/index.html", "/ap/index.html").setFilter(ON_AP_FILTER);
-    _server.serveStatic("/ap/", FFS, Config.web.DIR_AP)
-        .setDefaultFile("index.html")
-        .setCacheControl("max-age=3600")
-        .setAuthentication(Config.web.HTTP_NAME, Config.web.HTTP_PASS)
-        .setFilter(ON_AP_FILTER);
-
-    _server.serveStatic("/", FFS, Config.web.DIR_STA)
-        .setDefaultFile("index.html")
-        .setFilter(ON_STA_FILTER);
-    _server.onNotFound(onError);
+    _server.serveStatic("/assets/", FFS, Config.web.DIR_SRC);
+    _server.onNotFound(onErrorFileManager);
     _server.onFileUpload(onUploadStrict);
 }
 

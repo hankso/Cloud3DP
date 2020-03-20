@@ -19,16 +19,12 @@ void console_handle_one();
 // (L) endless Loop of console_handle_one.
 void console_handle_loop(void*);
 
-// Create a FreeRTOS Task on console_handle_loop.
-void console_loop_begin(int xCoreID = 1);
-
-// Stop loopTask created by console_loop_begin.
-void console_loop_end();
+// Create a FreeRTOS Task on function console_handle_loop.
+void console_loop_begin(int xCoreID = -1);
 
 
 // When calling console_handle_command, remember to free the buffer after usage
 char * console_handle_command(char* cmd, bool hist = true);
-// Save result in buf and append the command to linenoise's history (default).
-void console_handle_command(char *, char *buf, size_t len, bool hist = true);
+void console_register_commands();
 
 #endif // _CONSOLE_H

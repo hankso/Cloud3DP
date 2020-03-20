@@ -1,0 +1,5 @@
+key,type,encoding,value
+data,namespace,,
+uid,file,string,nvs_id
+ver,data,string,0.2.1
+counter,data,u32,0

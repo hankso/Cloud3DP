@@ -18,6 +18,7 @@ typedef struct config_webserver_t {
     const char * HTTP_PASS; // Password. Leave it empty("") to disable
     const char * VIEW_EDIT; // Template filename for Online Editor
     const char * VIEW_FILE; // Template filename for Files Manager
+    const char * DIR_SRC;   // Path to public CSS/JS files
     const char * DIR_STA;   // Path to static files hosted on STA interface
     const char * DIR_AP;    // Path to static files hosted on AP interface
     const char * DIR_DATA;  // Directory to storage data

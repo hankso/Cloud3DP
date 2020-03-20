@@ -1,4 +1,4 @@
-*.bin
+bin
+build
 .ropeproject
 __pycache__
-build

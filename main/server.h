@@ -5,6 +5,20 @@
  *
  * WebServerClass wraps on AsyncWebServer to provide only `begin` and `end` 
  * function for easier usage.
+ *
+ * API list:
+ *  Name    Method  Description
+ *  /ws     POST    Websocket connection point: messages are parsed as JSON
+ *  /info   GET     Get JSON string containing machine information
+ *  /cmd    POST    TODO
+ *
+ * softAP only:
+ *  Name    Method  Description
+ *  /config GET     Configuration guide page
+ *  /config POST    Overwrite configuration options
+ *  /update GET     Updation guide page
+ *  /update POST    Upload compiled binary firmware to OTA flash partition
+ *  /edit   ANY     Online Editor page: create/delete/edit
  */
 
 #ifndef _SERVER_H_
@@ -30,11 +44,12 @@ public:
     void begin();                   // run server in LWIP thread
     void end() { _server.end(); }   // stop AsyncWebServer
 
-    void register_http_api();
-    void register_websocket();      // WebSocket messages are parsed as JSON
-    void register_statics();        // host static files like HTML/JS/CSS
-    bool logging();                 // get logging level
-    void logging(bool);             // set logging or not
+    void register_sta_api();
+    void register_ap_api();
+    void register_ws_api();
+    void register_statics();
+    bool logging();
+    void logging(bool);             // enable/disable http request logging
 };
 
 extern WebServerClass WebServer;

@@ -1,12 +1,12 @@
 <!DOCTYPE html>
 <html>
 <head>
+    <title>Temp Control</title>
     <meta http-equiv="content-type" content="text/html; charset=utf-8">
-    <title>ESP32 TempCtl</title>
-    <script src="/js/jquery.min.js"></script>
-    <script src="/js/echarts.min.js"></script>
-    <script src="/js/echart-option.js"></script>
-    <script src="/js/fontawesome.min.js"></script>
+    <script src="/assets/js/jquery.min.js"></script>
+    <script src="/assets/js/echarts.min.js"></script>
+    <script src="/assets/js/fontawesome.min.js"></script>
+    <script src="js/echart-option.js"></script>
 </head>
 
 <body>
@@ -15,10 +15,6 @@
     
     <div id='echart' style="width:90%; min-height:400px; margin:50px 0;"></div>
 
-    <div class="bottom">
-        <a href="/src"><span class="fa fa-folder">SPI Flash File Manager</span></a>
-        <a href="/update"><span class="fa fa-cloud-upload">Runtime Update Firmware</span></a>
-    </div>
     <script type="text/javascript">
         var chart;
         $(function() {

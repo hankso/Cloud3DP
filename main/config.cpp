@@ -31,10 +31,11 @@ static config_web_t WEB = {
     .WS_PASS   = "",
     .HTTP_NAME = "temp",
     .HTTP_PASS = "temp",
-    .VIEW_EDIT = "/src/editor.html",
-    .VIEW_FILE = "/src/files.html",
-    .DIR_STA   = "/src/",
-    .DIR_AP    = "/src/",
+    .VIEW_EDIT = "/ap/editor.html",
+    .VIEW_FILE = "/ap/files.html",
+    .DIR_SRC   = "/src/",
+    .DIR_STA   = "/sta/",
+    .DIR_AP    = "/ap/",
     .DIR_DATA  = "/dat/",
 };
 static config_net_t NET = {
@@ -66,8 +67,9 @@ config_t Config = {
 // but const char * cannot be deallocated. If the pointer in staticlist, then 
 // it's a TRUE const char pointer, or it's actually char * (free it!)
 static const char * staticlist[] = {
-    WEB.WS_NAME,   WEB.WS_PASS,   WEB.HTTP_NAME, WEB.HTTP_PASS,
-    WEB.VIEW_EDIT, WEB.VIEW_FILE, WEB.DIR_STA,   WEB.DIR_AP,    WEB.DIR_DATA,
+    WEB.WS_NAME,   WEB.WS_PASS,
+    WEB.HTTP_NAME, WEB.HTTP_PASS, WEB.VIEW_EDIT, WEB.VIEW_FILE,
+    WEB.DIR_SRC,   WEB.DIR_STA,   WEB.DIR_AP,    WEB.DIR_DATA,
     NET.AP_NAME,   NET.AP_PASS,   NET.AP_HOST,   NET.STA_NAME,  NET.STA_PASS,
     APP.DNS_RUN,   APP.DNS_HOST,  APP.OTA_RUN,   APP.OTA_URL,   APP.PROMPT,
 };
@@ -80,6 +82,7 @@ static const char
     *WEB_HTTP_PASS = "web.http.pass",
     *WEB_VIEW_EDIT = "web.view.editor",
     *WEB_VIEW_FILE = "web.view.manage",
+    *WEB_DIR_SRC   = "web.path.src",
     *WEB_DIR_STA   = "web.path.sta",
     *WEB_DIR_AP    = "web.path.ap",
     *WEB_DIR_DATA  = "web.path.upload",
@@ -100,8 +103,8 @@ config_entry_t cfglist[] = {
     {WEB_WS_NAME,   &WEB.WS_NAME},   {WEB_WS_PASS,   &WEB.WS_PASS},
     {WEB_HTTP_NAME, &WEB.HTTP_NAME}, {WEB_HTTP_PASS, &WEB.HTTP_PASS},
     {WEB_VIEW_EDIT, &WEB.VIEW_EDIT}, {WEB_VIEW_FILE, &WEB.VIEW_FILE},
-    {WEB_DIR_STA,   &WEB.DIR_STA},   {WEB_DIR_AP,    &WEB.DIR_AP},
-    {WEB_DIR_DATA,  &WEB.DIR_DATA},
+    {WEB_DIR_SRC,   &WEB.DIR_SRC},   {WEB_DIR_STA,   &WEB.DIR_STA},
+    {WEB_DIR_AP,    &WEB.DIR_AP},    {WEB_DIR_DATA,  &WEB.DIR_DATA},
 
     {NET_AP_NAME,   &NET.AP_NAME},   {NET_AP_PASS,   &NET.AP_PASS},
     {NET_AP_HOST,   &NET.AP_HOST},   {NET_STA_NAME,  &NET.STA_NAME},
@@ -262,7 +265,6 @@ bool config_initialize() {
 
     // load readonly values
     if (config_nvs_open("data", true) == ESP_OK) {
-        _nvs_load_str("name", &Config.info.NAME);
         _nvs_load_str("uid",  &Config.info.UID);
         _nvs_load_str("ver",  &Config.info.VER);
         config_nvs_close();
@@ -402,25 +404,36 @@ void config_nvs_list() {
     nvs_iterator_t iter;
     nvs_entry_info_t info;
     iter = nvs_entry_find(nvs_st.part->label, "config", NVS_TYPE_ANY);
-    if (iter != NULL) {
-        printf("Namespace: config\n");
-    } else {
+    if (iter == NULL) {
         ESP_LOGE(TAG, "Cannot find entries under `config` namespace in `%s`",
                  nvs_st.part->label);
+        return;
     }
+    printf("Namespace: config\nKEY\t\t\tVALUE\n");
     while (iter != NULL) {
         nvs_entry_info(iter, &info);
-        printf(" Key: %.16s value: `%s`\n", info.key, config_get(info.key));
         iter = nvs_entry_next(iter);
+        const char *key = info.key, *value = config_get(key);
+        printf(" %-15.15s\t", key);
+        if (!strcmp(key + strlen(key) - 4, "pass")) {
+            printf("`%.*s`\n", strlen(value), "********");
+        } else {
+            printf("`%s`\n", value);
+        }
     }
     nvs_release_iterator(iter);
 #else
-    if (!config_nvs_open("config", true)) {
-        config_nvs_close();
-        printf("Namespace: config\n");
-    }
+    if (config_nvs_open("config", true)) return;
+    else config_nvs_close();
+    printf("Namespace: config\n KEY\t\t\tVALUE\n");
     for (uint16_t i = 0; i < numcfg; i++) {
-        printf(" Key: `%s`, value: `%s`\n", cfglist[i].key, *cfglist[i].value);
+        const char *key = cfglist[i].key, *value = *cfglist[i].value;
+        printf(" %-15.15s\t", key);
+        if (!strcmp(key + strlen(key) - 4, "pass")) {
+            printf("`%.*s`\n", strlen(value), "********");
+        } else {
+            printf("`%s`\n", value);
+        }
     }
 #endif
 }
@@ -438,12 +451,12 @@ void config_nvs_stats() {
     }
     printf(
         "NVS Partition Status:\n"
+        " Namespaces: %d\n"
         " Used: %d entries\n"
         " Free: %d entries\n"
-        " Namespaces: %d\n"
         " Total: %d entries\n",
-        nvs_stats.used_entries, nvs_stats.free_entries,
-        nvs_stats.namespace_count, nvs_stats.total_entries
+        nvs_stats.namespace_count, nvs_stats.used_entries,
+        nvs_stats.free_entries, nvs_stats.total_entries
     );
 }
 
@@ -466,7 +479,7 @@ bool _nvs_load_str(const char *key, const char * *ptr) {
     } else {
         int16_t idx = config_index(key);
         if (idx != -1 && *ptr != staticlist[idx]) {
-            free((void *)(const void *)*ptr);
+            free(cast_away_const_force(*ptr));
         }
         *ptr = tmp;
     }
