@@ -1,0 +1,518 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <title>Online Editor</title>
+    <meta http-equiv="content-type" content="text/html; charset=utf-8">
+    <script src="js/ajax.js"></script>
+    <script src="js/file-api.js"></script>
+    <script src="js/ace.js"></script>
+    <script src="js/ext-shortcut.js"></script>
+    <script src="js/ext-settings.js"></script>
+    <style>
+        .hidden { display: none; }
+        .custom-sb::-webkit-scrollbar {
+            height: 3px;
+            width: 3px;
+            background-color: transparent;
+        }
+        .custom-sb::-webkit-scrollbar-thumb { background-color: #aaa; }
+        a { cursor: pointer; }
+        svg { height: 16px; width: 16px; }
+        #preview img {
+            display: block;
+            max-width: 100%;
+            max-height: 100%;
+            margin: auto;
+        }
+        html {
+            font-size: 16px;
+            font-family: Ubuntu, Tahoma, monospace;
+        }
+        body {
+            display: flex;
+            flex-flow: row wrap;
+            position: absolute;
+            left: 0;
+            right: 0;
+            top: 0;
+            bottom: 0;
+            margin: 0;
+            text-align: left;
+        }
+        body > div {
+            height: calc(100% - 1.5rem);
+            border: 1px solid grey;
+            box-sizing: border-box;
+        }
+        #tree { flex: 2; overflow: auto; }
+        #tree #parent-list { color: green; }
+        #tree #parent-list:hover { color: grey; }
+        #tree #parent-list a:hover { color: green; font-weight: bold; }
+        #tree #leaf-list { list-style: none; padding-top: 1em; }
+        #tree #leaf-list > * { padding-left: 1em; }
+        #tree .path { white-space: nowrap; }
+        #tree .path.dir { color: blue; }
+        #tree .highlightEdit { background-color: lightgrey; color: red; }
+        #editor, #preview { flex: 8; overflow-x: auto; }
+        #bottombar {
+            flex: 100%;
+            position: relative;
+            height: 1.5em;
+            padding-right: 5em;
+        }
+        #bottombar > div { height: 100%; }
+        #bottombar #status-box {
+            overflow-y: hidden;
+            font-size: .8rem;
+            line-height: calc(1.5rem - 2px);
+        }
+        #bottombar #status-box .message { padding-left: .5rem; }
+        #bottombar #status-box .progbar { text-align: center; }
+        #bottombar #status-box .progbar * { background-color: lightgreen; }
+        #bottombar #menu-box {
+            position: absolute;
+            top: 0;
+            right: 0;
+            width: 5rem;
+            border-left: 1px solid grey;
+            padding-top: 1px;
+            display: flex;
+            flex-wrap: nowrap;
+            align-items: center;
+            justify-content: space-evenly;
+        }
+        #bottombar #menu-box #menu-panel {
+            position: absolute;
+            right: 0;
+            bottom: 1.5rem;
+            width: 15em;
+            border: 1px solid blue;
+            border-radius: 1em;
+            border-bottom-right-radius: 0;
+            padding: 1em;
+            z-index: 999;
+            background-color: #c3c3c380;
+        }
+        #menu-panel > div {
+            transition: all 0.3s;
+            width: 100%;
+            height: 1.8rem;
+            overflow: hidden;
+            display: flex;
+            flex-flow: nowrap;
+            align-items: center;
+            justify-content: space-between;
+        }
+        #menu-panel input[type="text"] { max-width: 60%; }
+        #menu-panel label { font-size: .8rem; font-family: monospace; }
+        #menu-panel[data-type] { display: block; }
+        #menu-panel[data-type="create"] .for-upload { height: 0; }
+        #menu-panel[data-type="upload"] .for-create { height: 0; }
+    </style>
+</head>
+<body onload="javascript:onBodyLoad();">
+    <div id="tree" class="custom-sb">
+        <div>Index <span id="parent-list"></span></div>
+        <div id="leaf-list"></div>
+    </div>
+    <div id="editor" class="custom-sb"></div>
+    <div id="preview" class="hidden"><img></div>
+    <div id="bottombar">
+        <div id="status-box">
+            <div class="progbar"><div></div></div>
+            <div class="message"></div>
+        </div>
+        <div id="menu-box">
+            <a class="icon toggle" title="Tree View" onclick="treeToggle()"></a>
+            <a class="icon refresh" title="Refresh" onclick="treeRefresh()"></a>
+            <a class="icon upload" onclick="menuToggle('upload')"></a>
+            <a class="icon create" onclick="menuToggle('create')"></a>
+            <form id="menu-panel" class="hidden">
+                <div class="for-upload">
+                    <input id="upload-file" type="file" onchange="uploadName()">
+                </div>
+                <div>
+                    <label>Path name</label>
+                    <input id="upload-path" type="text" name="path" value="/">
+                </div>
+                <div class="for-create">
+                    <label>Path type</label>
+                    <select id="upload-type">
+                        <option value="file" selected>file</option>
+                        <option value="folder">folder</option>
+                    </select>
+                    <button onclick="return createFile();">Create</button>
+                </div>
+                <div>
+                    <button onclick="return uploadFile();">Upload</button>
+                    <input type="reset" value="Reset">
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        function onBodyLoad(){
+            // recover from where you left last time
+            window.config = localStorage;
+            // specify filename/language-highlight etc. via URL
+            let search = new URLSearchParams(window.location.search);
+            for (let [k, v] of search) config.setItem(k, v);
+            config.filename = config.filename || "/ap/index.html";
+            // hide files tree when the editor page is imported as iframe
+            if (config.tree === "hide") {
+                ge("tree").style.display = "none";
+                treeToggle = ()=>{};
+            }
+            // replace icons with inline SVG
+            let icons = document.getElementsByClassName("icon");
+            for (let i = 0; i < icons.length; i++) {
+                let name = icons[i].classList[1];
+                let template = ge("template-icon-svg");
+                icons[i].insertAdjacentHTML(
+                    "afterBegin", eval("`" + template.innerHTML + "`"));
+            }
+            window.editor = createEditor("editor");
+            editor.loadFile(config.filename, config.lang);
+        };
+    </script>
+    
+    <script title="Filename: js/editor.js">
+        // helper function to open multiple files
+        ace.Editor.prototype.loadFile = function(filename, lang) {
+            if (filename && filename != config.filename) {
+                if (config.modified == "true") {
+                    logStatus("auto-saving...");
+                    editor.execCommand("save");
+                }
+                config.modified = false;
+            } else {
+                filename = filename || config.filename;
+            }
+            // resolve pathname of new opening file
+            let pathname = config.pathname;
+            if (!filename.includes("/")) {
+                if (pathname) {
+                    // try opening filename under current directory
+                    filename = pathname + filename;
+                } else
+                    throw Error(`Invalid filename to edit: ${filename}`);
+            } else if (filename.endsWith("/")) {
+                pathname = config.filename;
+                filename = "index.html";
+            } else {
+                let idx = filename.lastIndexOf("/");
+                pathname = filename.substr(0, idx + 1);
+            }
+            config.filename = filename;
+            config.pathname = pathname; treeRefresh();
+            if (getTypeFromFilename(filename) == "img") {
+                this.container.style.display = "none";
+                ge("preview").style.display = "block";
+                ge("preview").children[0].src = API("edit", filename);
+                return;
+            } else {
+                this.container.style.display = "block";
+                ge("preview").style.display = "none";
+            }
+            // set language highlight
+            config.lang = lang = lang || getLangFromFilename(filename);
+            if (lang != "plain") this.session.setMode("ace/mode/" + lang);
+            ajaxXHR({
+                url: API("edit", filename), method: "GET", success: (ret)=>{
+                    this.setValue(ret);
+                    this.clearSelection();
+                    logStatus(`Editing "${filename}"`);
+                    config.modified = false;
+                }, error: ()=>{ this.setValue("File cannot be loaded!"); },
+                progress: ajaxProgress
+            });
+        }
+
+        function createEditor(element) {
+            let editor = ace.edit(element, {
+                theme: "ace/theme/" + (config.theme || "textmate"),
+                //autoScrollEditorIntoView: true,
+                highlightActiveLine: true,
+                showFoldWidgets: true,
+                showPrintMargin: false,
+            });
+            ace.require("ace/ext/settings_menu").init(editor);
+            ace.require("ace/ext/keybinding_menu").init(editor);
+
+            editor.on("change", ()=>{ config.modified = true; });
+            
+            // Editor configuration
+            editor.session.setUseSoftTabs(true);
+            editor.session.setTabSize(4);
+            editor.setHighlightActiveLine(true);
+            editor.setShowFoldWidgets(true);
+            editor.setShowPrintMargin(false);
+            editor.commands.addCommands([
+                {
+                    name: "save",
+                    bindKey: {win: "Ctrl-S",  mac: "Command-S"},
+                    exec: updateFile,
+                    readOnly: false
+                },
+                {
+                    name: "settings",
+                    bindKey: {win: "Ctrl-Q", mac: "Command-Q"},
+                    exec: (editor)=>editor.showSettingsMenu(),
+                    readOnly: false
+                },
+                {
+                    name: "keybings",
+                    bindKey: {win: "Ctrl-H", mac: "Command-H"},
+                    exec: (editor)=>editor.showKeyboardShortcuts(),
+                }
+            ]);
+            return editor;
+        }
+    </script>
+
+    <!-- TODO: <a class='icon ${type}' onclick='treeExtend(${name})'> -->
+    <script type="text/template", id="template-leaf">
+        <li id="${name}" class="${iscur ? 'highlightEdit' : ''}"
+         ${name.endsWith('.gz') ? 'disabled' : ''}>
+            <a class="path ${type}"
+             onclick="${isdir ? `treeSwitch('${name}')` : `editor.loadFile('${config.pathname}${name}')`}">
+                ${name + (isdir ? "/" : "")}
+            </a>
+            <span class="hidden">
+                <a class="icon trash" onclick="deletePath('${name}')"></a>
+                <a class="icon download ${isdir ? 'hidden' : ''}"
+                 href="${API('down', name)}" target="_blank"></a>
+            </span>
+        </li>
+    </script>
+
+    <script title="Filename: js/editor-tree.js">
+        function treeToggle() { // hide|show
+            let style = ge("tree").style;
+            if (style.display === "none") {
+                style.display = "block";
+                logStatus("Tree view enabled");
+            } else {
+                style.display = "none";
+                logStatus("Tree view disabled");
+            }
+        }
+        function treeRefresh() {
+            if (ge("tree").style.display === "none") return;
+            let lst = ge("leaf-list"),
+                tpl = ge("template-leaf"),
+                prt = ge("parent-list"),
+                root = config.pathname,
+                parents = root.substr(0, root.length - 1).split("/");
+            // render parents directory links
+            prt.innerHTML = "";
+            for (let e, i = 0; i < parents.length; i++) {
+                e = ce("a");
+                e.innerText = parents[i] + "/";
+                e.dataset.path = parents.slice(0, i + 1).join("/") + "/";
+                e.onclick = function(){ treeSwitch(this.dataset.path); };
+                prt.appendChild(e);
+            }
+            // render files tree
+            listDir(root, (filelist)=>{
+                filelist.sort((a, b)=>{
+                    let x = a["name"], y = b["name"];
+                    return (x < y) ? -1 : ((x > y) ? 1 : 0);
+                });
+                lst.innerHTML = "";
+                filelist.forEach(({name, type, size})=>{
+                    if (name.startsWith(".")) return;
+                    let isdir = type == "dir",
+                        iscur = (root + name) == config.filename;
+                    lst.innerHTML += eval("`" + tpl.innerHTML + "`");
+                });
+                logStatus("Tree view rendered");
+            });
+        }
+        function treeSwitch(dir) {
+            if (dir.startsWith("/")) {
+                if (!dir.endsWith("/"))
+                    dir += "/";
+                config.pathname = dir;
+            } else {
+                config.pathname += (dir + "/");
+            }
+            treeRefresh();
+        }
+    </script>
+
+    <script title="Filename: js/editor-upload.js">
+        function menuToggle(target) {
+            let data = ge("menu-panel").dataset;
+            if (!data.type || data.type !== target) {
+                data.type = target;
+                ge("upload-path").value = config.pathname;
+            } else
+                delete data.type;
+        }
+        function createFile() {
+            let path = ge("upload-path");
+            if (!path.value || path.value == "/") {
+                logStatus("Invalid path name");
+                return false;
+            }
+            let isdir = ge("upload-type").selectedOptions[0].value == "folder";
+            createPath(path.value, isdir, treeRefresh);
+            path.value = config.pathname;
+            return true;
+        }
+        function uploadName() {
+            // copy filename to input#upload-path for modification by user
+            let input = ge("upload-file");
+            if (!input.files.length) return;
+            ge("upload-path").value += input.files[0].name;
+        }
+        function uploadFile() {
+            let input = ge("upload-file");
+            if (!input.files.length) {
+                logStatus("No file selected");
+                return false;
+            }
+            let path = ge("upload-path"), filename = path.value;
+            if (!filename.startsWith("/")) filename = "/" + filename;
+            let data = new FormData();
+            data.append("data", input.files[0], filename);
+            ajaxXHR(API("upload"), {
+                method: "POST", data: data, success: ()=>{
+                    logStatus(`"${filename}" uploaded`);
+                    treeRefresh();
+                }, error: (xhr, code, text)=>{
+                    logStatus(`Upload failed [${code}]: ${text}`)
+                }, progress: ajaxProgress
+            });
+            path.value = config.pathname;
+            input.value = "";
+            return true;
+        }
+        function updateFile() {
+            if (this.semaphore === undefined) this.semaphore = 0;
+            if (this.semaphore) return logStatus("Busy updating file");
+            else this.semaphore = 1;
+            let text = editor.getValue() + "";
+            let blob = new Blob([text], { type: "text/plain" });
+            let data = new FormData();
+            data.append("data", blob, config.filename);
+            ajaxXHR(API("upload"), {
+                method: "POST", data: data, success: ()=>{
+                    logStatus(`"${config.filename}" saved`);
+                    config.modified = false;
+                    updateFile.semaphore = 0;
+                }, error: (xhr, code, text)=>{
+                    logStatus(`Save failed [${code}]: ${text}`);
+                    updateFile.semaphore = 0;
+                }, progress: ajaxProgress
+            });
+        }
+    </script>
+
+    <script title="Filename: js/editor-utils.js">
+        function getLangFromFilename(filename){
+            let lang = "plain";
+            let exts = filename.split(".");
+            if (exts.length < 2) return lang;
+            switch(exts[1]) {
+            case "ts": lang = "typescript"; break;
+            case "js": lang = "javascript"; break;
+            case "txt":
+            case "hex": lang = "plain"; break;
+            case "conf":
+            case "ini": lang = "ini"; break;
+            case "htm":
+            case "html": lang = "html"; break;
+            case "md":
+            case "markdown": lang = "markdown"; break;
+            case "h":
+            case "c":
+            case "cpp": lang = "c_cpp"; break;
+            case "css":
+            case "svg":
+            case "scss":
+            case "gcode":
+            case "json":
+            case "xml": lang = exts[1];
+            }
+            return lang;
+        }
+
+        function getTypeFromFilename(filename) {
+            switch(filename.split(".")[1]) {
+            case "png":
+            case "jpg":
+            case "gif":
+            case "ico":
+            case "bmp": return "img";
+            default: return "text";
+            }
+        }
+
+        var ajaxProgress = (function() {
+            var status = ge("status-box"),
+                message = status.children[1],
+                progbar = status.children[0],
+                progress = progbar.children[0],
+                showbar = false;
+            function showBar() {
+                if (showbar) return;
+                else showbar = true;
+                //message.style.display = "none";
+                progbar.style.display = "block";
+            }
+            function hideBar() {
+                if (!showbar) return;
+                else showbar = false;
+                //message.style.display = "block";
+                progbar.style.display = "none";
+            }
+            function setProgress(rate = 0) {
+                progress.style.width = progress.innerText = (rate + "%");
+            }
+            return (e) => {
+                if (e.lengthComputable) {
+                    showBar();
+                    setProgress((e.loaded / e.total * 100).toFixed(1));
+                } else {
+                    hideBar();
+                    logStatus(`Received ${formatSize(e.loaded)}`);
+                }
+                if (e.loaded == e.total) setTimeout(hideBar, 500);
+            }
+        })();
+
+        function logStatus(s) {
+            let now = (new Date()).toLocaleTimeString(),
+                msg = ge("status-box").children[1];
+            msg.innerHTML = `${now} - ${s}`;
+            console.log(s);
+            clearTimeout(this.id || 0);
+            this.id = setTimeout(function() {
+                msg.innerHTML = "";
+            }, 5000);
+        }
+    </script>
+
+    <script type="text/template" id="template-icon-svg">
+        <svg><use xlink:href="#icon-${name}" href="#icon-${name}"></svg>
+    </script>
+
+    <svg class="hidden" version="1.1" xmlns="http://www.w3.org/2000/svg">
+        <symbol id="icon-toggle" viewBox="0 0 1024 1024">
+            <path d="M853.333333 554.666667H170.666667c-23.466667 0-42.666667-19.2-42.666667-42.666667s19.2-42.666667 42.666667-42.666667h682.666666c23.466667 0 42.666667 19.2 42.666667 42.666667s-19.2 42.666667-42.666667 42.666667zM853.333333 320H170.666667c-23.466667 0-42.666667-19.2-42.666667-42.666667s19.2-42.666667 42.666667-42.666666h682.666666c23.466667 0 42.666667 19.2 42.666667 42.666666s-19.2 42.666667-42.666667 42.666667zM853.333333 789.333333H170.666667c-23.466667 0-42.666667-19.2-42.666667-42.666666s19.2-42.666667 42.666667-42.666667h682.666666c23.466667 0 42.666667 19.2 42.666667 42.666667s-19.2 42.666667-42.666667 42.666666z"></path>
+        </symbol>
+        <symbol id="icon-refresh" viewBox="0 0 1024 1024">
+            <path d="M846.664 729.298a44.836 44.836 0 0 1-11.614 15.068c-18.98 16.044-47.372 13.664-63.416-5.316l-153-181c-16.044-18.98-13.664-47.372 5.316-63.416 18.98-16.044 47.372-13.664 63.416 5.316l110.22 130.39c55.674-133.486 11.568-292.066-112.944-376.05-141.94-95.738-334.614-58.286-430.352 83.652-95.738 141.94-58.286 334.614 83.652 430.352 50.74 34.224 109.574 52.462 170.228 53.016C536.056 829.77 550 845.334 550 868c0 22.666-14.218 37.102-42.652 43.306-78.286-0.716-154.34-24.29-219.732-68.4-183.146-123.532-231.472-372.146-107.94-555.29 123.534-183.146 372.148-231.472 555.294-107.94 181.26 122.264 230.462 367.046 111.694 549.622z"></path>
+        </symbol>
+        <symbol id="icon-upload" viewBox="0 0 1024 1024">
+            <path d="M776.533333 896H247.466667C181.333333 896 128 842.666667 128 776.533333v-151.466666c0-23.466667 19.2-42.666667 42.666667-42.666667s42.666667 19.2 42.666666 42.666667v151.466666c0 19.2 14.933333 34.133333 34.133334 34.133334h531.2c19.2 0 34.133333-14.933333 34.133333-34.133334v-151.466666c0-23.466667 19.2-42.666667 42.666667-42.666667s42.666667 19.2 42.666666 42.666667v151.466666c-2.133333 66.133333-55.466667 119.466667-121.6 119.466667zM701.866667 403.2c-10.666667 0-21.333333-4.266667-29.866667-12.8L512 230.4l-160 160c-17.066667 17.066667-42.666667 17.066667-59.733333 0-17.066667-17.066667-17.066667-42.666667 0-59.733333l189.866666-189.866667c17.066667-17.066667 42.666667-17.066667 59.733334 0l189.866666 189.866667c17.066667 17.066667 17.066667 42.666667 0 59.733333-8.533333 8.533333-19.2 12.8-29.866666 12.8z"></path><path d="M512 667.733333c-23.466667 0-42.666667-19.2-42.666667-42.666666V170.666667c0-23.466667 19.2-42.666667 42.666667-42.666667s42.666667 19.2 42.666667 42.666667v454.4c0 23.466667-19.2 42.666667-42.666667 42.666666z"></path>
+        </symbol>
+        <symbol id="icon-create" viewBox="0 0 1024 1024">
+            <path d="M465.02 467l-0.086-309.988C464.928 132.16 485.07 112.006 509.922 112c24.852-0.006 45.006 20.134 45.012 44.988l0.086 310.012h310.21c24.852 0 45 20.148 45 45s-20.148 45-45 45H555.046l0.084 309.988c0.008 24.852-20.134 45.006-44.986 45.012-24.854 0.006-45.006-20.134-45.014-44.988l-0.084-310.012H157C132.148 557 112 536.852 112 512s20.148-45 45-45h308.02z"></path>
+        </symbol>
+    </svg>
+</body>
+</html>

@@ -5,7 +5,6 @@
 */
 
 #include "console.h"
-#include "console_pipe.h"
 #include "config.h"
 #include "globals.h"
 
@@ -92,8 +91,11 @@ char * console_handle_command(char *cmd, bool history) {
     console_pipe_exit();
     if (buf != NULL) {
         if (!size) {
-            buf[0] = '\r'; buf[1] = '\0';
-        } else buf[size] = '\0';
+            free(buf);
+            buf = NULL;
+        } else {
+            buf[size] = '\0';
+        }
     }
     // xTaskNotifyGive(console_task);
     xSemaphoreGive(xSemaphore);
@@ -101,13 +103,10 @@ char * console_handle_command(char *cmd, bool history) {
 }
 
 void console_handle_one() {
-    char *cmd = linenoise(prompt);
-    if (cmd != NULL) {
-        char *ret = console_handle_command(cmd);
-        if (ret != NULL) {
-            printf("%s\n", ret);
-            free(ret);
-        }
+    char *ret, *cmd = linenoise(prompt);
+    if (cmd != NULL && (ret = console_handle_command(cmd))) {
+        printf("%s\n", ret);
+        free(ret);
     }
     linenoiseFree(cmd);
 }

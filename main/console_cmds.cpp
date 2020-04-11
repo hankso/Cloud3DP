@@ -8,7 +8,9 @@
  */
 
 #include "console.h"
+#include "wifi.h"
 #include "config.h"
+#include "update.h"
 #include "globals.h"
 
 #include "esp_log.h"
@@ -40,14 +42,13 @@ static struct arg_str *action = arg_str0(
 static struct arg_int *channel = arg_int0(
         "c", "channel", "<0-7>", "specify channel number, default all");
 
-
-// static struct action_args_t {
-//     struct arg_str *action;
-//     struct arg_end *end;
-// } bool_args = {
-//     .action = action,
-//     .end = arg_end(1)
-// };
+static struct action_args_t {
+    struct arg_str *action;
+    struct arg_end *end;
+} bool_args = {
+    .action = action,
+    .end = arg_end(1)
+};
 
 typedef struct {
     struct arg_str *action;
@@ -159,15 +160,35 @@ esp_console_cmd_t cmd_wifi_disconnect = {
     .command = "disconnect",
     .help = "not implemented yet",
     .hint = NULL,
-    .func = [](int argc, char **argv) -> int { return 1; },
+    .func = [](int argc, char **argv) -> int {
+        return wifi_disconnect() ? 0 : 1;
+    },
     .argtable = NULL
 };
 
-esp_console_cmd_t cmd_wifi_list = {
-    .command = "lswifi",
+esp_console_cmd_t cmd_wifi_scan = {
+    .command = "scan",
     .help = "not implemented yet",
     .hint = NULL,
-    .func = [](int argc, char **argv) -> int { return 1; },
+    .func = [](int argc, char **argv) -> int { wifi_sta_list(); return 0; },
+    .argtable = NULL
+};
+
+esp_console_cmd_t cmd_wifi_clients = {
+    .command = "lswifi",
+    .help = "List WiFi stations connected to current softAP",
+    .hint = NULL,
+    .func = [](int argc, char **argv) -> int { wifi_ap_list(); return 0; },
+    .argtable = NULL
+};
+
+esp_console_cmd_t cmd_wifi_softap = {
+    .command = "wifi",
+    .help = "Hide/Show/Refresh softAP configuration",
+    .hint = NULL,
+    .func = [](int argc, char **argv) -> int {
+        return 1;
+    },
     .argtable = NULL
 };
 
@@ -210,11 +231,7 @@ int enable_gpio_light_wakeup() {
     const char *lvls;
     for (int i = 0; i < gpio_count; i++) {
         gpio = sleep_args.wakeup_gpio_num->ival[i];
-        if (level_count != 0) {
-            level = sleep_args.wakeup_gpio_level->ival[i];
-        } else {
-            level = 0;
-        }
+        level = level_count ? sleep_args.wakeup_gpio_level->ival[i] : 0;
         lvls = level ? "HIGH" : "LOW";
         intr = level ? GPIO_INTR_HIGH_LEVEL : GPIO_INTR_LOW_LEVEL;
         printf("Enable GPIO wakeup, num: %d, level: %s\n", gpio, lvls);
@@ -299,7 +316,15 @@ esp_console_cmd_t cmd_sys_restart = {
     .argtable = NULL
 };
 
-esp_console_cmd_t cmd_sys_update = {
+esp_console_cmd_t cmd_sys_otainfo = {
+    .command = "lsota",
+    .help = "List information of OTA partitons and ota_apps",
+    .hint = NULL,
+    .func = [](int argc, char **argv) -> int { ota_info(); return 0; },
+    .argtable = NULL
+};
+
+esp_console_cmd_t cmd_sys_otaupdate = {
     .command = "update",
     .help = "OTA Updation through BT/WiFi/HTTPServer",
     .hint = NULL,
@@ -309,38 +334,67 @@ esp_console_cmd_t cmd_sys_update = {
     .argtable = NULL
 };
 
-bool ota_update_from_url(char *url) {
-    esp_ota_handle_t handle;
-    const esp_partition_t *current = esp_ota_get_running_partition();
-    printf("Currently running partition %d-%d\n");
-}
-
 /******************************************************************************
  * Utilities commands
  */
 
-esp_console_cmd_t cmd_utils_summary = {
-    .command = "summary",
-    .help = "Print summary of current status",
-    .hint = NULL,
-    .func = [](int argc, char **argv) -> int { return memory_info(); },
-    .argtable = NULL
-};
-
 esp_console_cmd_t cmd_utils_version = {
     .command = "version",
-    .help = "Get version of chip and SDK",
+    .help = "Get version of firmware and SDK",
     .hint = NULL,
-    .func = [](int argc, char **argv) -> int { return version_info(); },
+    .func = [](int argc, char **argv) -> int { version_info(); return 0; },
     .argtable = NULL
 };
 
+static struct {
+    struct arg_lit *verbose;
+    struct arg_end *end;
+} method_args = {
+    .verbose = arg_litn("v", NULL, 0, 2, "additive option for more output"),
+    .end = arg_end(1)
+};
+
+esp_console_cmd_t cmd_utils_memory = {
+    .command = "lsmem",
+    .help = "List the avaiable memory with their status",
+    .hint = NULL,
+    .func = [](int argc, char **argv) -> int {
+        if (!arg_noerror(argc, argv, (void **) &method_args)) return 1;
+        switch (method_args.verbose->count) {
+        case 0:
+            memory_info(); break;
+        case 1:
+            heap_caps_print_heap_info(MALLOC_CAP_INTERNAL);
+            heap_caps_print_heap_info(MALLOC_CAP_8BIT);
+            break;
+        case 2:
+            heap_caps_dump_all(); break;
+        }
+        return 0;
+    },
+    .argtable = &method_args
+};
 
 esp_console_cmd_t cmd_utils_tasks = {
     .command = "lstask",
-    .help = "Get information about running RTOS tasks",
+    .help = "List information of running RTOS tasks",
     .hint = NULL,
-    .func = [](int argc, char **argv) -> int { return task_info(); },
+    .func = [](int argc, char **argv) -> int { task_info(); return 0; },
+    .argtable = NULL
+};
+
+esp_console_cmd_t cmd_utils_hardware = {
+    .command = "lshw",
+    .help = "Display hardware details",
+    .hint = NULL,
+    .func = [](int argc, char **argv) -> int { hardware_info(); return 0; }
+};
+
+esp_console_cmd_t cmd_utils_partitions = {
+    .command = "lspart",
+    .help = "List information of partitions in flash",
+    .hint = NULL,
+    .func = [](int argc, char **argv) -> int { partition_info(); return 0; },
     .argtable = NULL
 };
 
@@ -363,21 +417,22 @@ esp_console_cmd_t cmd_utils_load = {
                          "/history.txt";
         File file = FFS.open(fn);
         if (!file) {
-            ESP_LOGE(NAME, "History file `%s` does not exists", fn);
+            printf("History file `%s` does not exists\n", fn);
             return 1;
-        } else file.close();
+        } else
+            file.close();
         char *mountpoint = "/spiffs";
         uint8_t len = strlen(fn) + strlen(mountpoint);
         char *tmp = (char *)malloc(len + 1);
         if (tmp == NULL) {
             ESP_LOGE(NAME, "Cannot allocate memory for filename. Try later");
             return 1;
-        } else {
-            snprintf(tmp, len + 1, "%s%s", mountpoint, fn);
-            ESP_LOGE(NAME, "Loading history file %s", tmp);
         }
+        snprintf(tmp, len + 1, "%s%s", mountpoint, fn);
         int ret = linenoiseHistoryLoad(tmp);
-        free(tmp); return ret;
+        printf("History file `%s` %sloaded\n", tmp, ret ? "not " : "");
+        free(tmp);
+        return ret;
     },
     .argtable = &hist_args
 };
@@ -393,31 +448,25 @@ esp_console_cmd_t cmd_utils_save = {
                          "/history.txt";
         File file = FFS.open(fn);
         if (file.isDirectory()) {
-            ESP_LOGE(NAME, "Invalid filename: %s is directory", fn);
-            file.close(); return 1;
-        } else file.close();
+            printf("Invalid filename: `%s` is directory\n", fn);
+            file.close();
+            return 1;
+        }
+        file.close();
         char *mountpoint = "/spiffs";
         uint8_t len = strlen(fn) + strlen(mountpoint);
         char *tmp = (char *)malloc(len + 1);
         if (tmp == NULL) {
             ESP_LOGE(NAME, "Cannot allocate memory for filename. Try later");
             return 1;
-        } else {
-            snprintf(tmp, len + 1, "%s%s", mountpoint, fn);
-            ESP_LOGI(NAME, "Saving history file %s". tmp);
         }
+        snprintf(tmp, len + 1, "%s%s", mountpoint, fn);
         int ret = linenoiseHistorySave(tmp);
-        free(tmp); return ret;
+        printf("History file `%s` %ssaved", tmp, ret ? "not " : "");
+        free(tmp);
+        return ret;
     },
     .argtable = &hist_args
-};
-
-esp_console_cmd_t cmd_utils_list = {
-    .command = "lspart",
-    .help = "List information of partitions in flash",
-    .hint = NULL,
-    .func = [](int argc, char **argv) -> int { return partition_info(); },
-    .argtable = NULL
 };
 
 /******************************************************************************
@@ -485,22 +534,26 @@ esp_console_cmd_t cmd_config_set = {
 void console_register_wifi() {
     ESP_ERROR_CHECK( esp_console_cmd_register(&cmd_wifi_connect) );
     ESP_ERROR_CHECK( esp_console_cmd_register(&cmd_wifi_disconnect) );
-    ESP_ERROR_CHECK( esp_console_cmd_register(&cmd_wifi_list) );
+    ESP_ERROR_CHECK( esp_console_cmd_register(&cmd_wifi_scan) );
+    ESP_ERROR_CHECK( esp_console_cmd_register(&cmd_wifi_clients) );
+    ESP_ERROR_CHECK( esp_console_cmd_register(&cmd_wifi_softap) );
 }
 
 void console_register_sys() {
     ESP_ERROR_CHECK( esp_console_cmd_register(&cmd_sys_sleep) );
     ESP_ERROR_CHECK( esp_console_cmd_register(&cmd_sys_restart) );
-    ESP_ERROR_CHECK( esp_console_cmd_register(&cmd_sys_update) );
+    ESP_ERROR_CHECK( esp_console_cmd_register(&cmd_sys_otainfo) );
+    ESP_ERROR_CHECK( esp_console_cmd_register(&cmd_sys_otaupdate) );
 }
 
 void console_register_utils() {
-    ESP_ERROR_CHECK( esp_console_cmd_register(&cmd_utils_summary) );
     ESP_ERROR_CHECK( esp_console_cmd_register(&cmd_utils_version) );
+    ESP_ERROR_CHECK( esp_console_cmd_register(&cmd_utils_memory) );
     ESP_ERROR_CHECK( esp_console_cmd_register(&cmd_utils_tasks) );
+    ESP_ERROR_CHECK( esp_console_cmd_register(&cmd_utils_hardware) );
+    ESP_ERROR_CHECK( esp_console_cmd_register(&cmd_utils_partitions) );
     ESP_ERROR_CHECK( esp_console_cmd_register(&cmd_utils_load) );
     ESP_ERROR_CHECK( esp_console_cmd_register(&cmd_utils_save) );
-    ESP_ERROR_CHECK( esp_console_cmd_register(&cmd_utils_list) );
 }
 
 void console_register_config() {

@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta http-equiv="content-type" content="text/html; charset=utf-8">
+    <title>Configuration</title>
+    <script src="js/ajax.js"></script>
+    <script src="js/config.js"></script>
+</head>
+<body onload="onBodyLoad()">
+    <h4>Configurations - WEB | NET | APP</h4>
+    <form id="config-lst" action="return false;">
+        <input type="reset" value="Reset" id="btn-reset">
+        <input type="submit" value="Save" onclick=" ">
+    </form>
+
+    <script type="text/template" id="template-entry">
+        <div>
+            <label>${key}</label>
+            <input type="" value="${value}" id="${key}">
+        </div>
+    </script>
+    
+    <script>
+        function renderField(ns) {
+            let lst = document.getElementById("config-lst"),
+                rst = document.getElementById("reset");
+            let field = document.createElement("fieldset"),
+                label = document.createElement("label");
+            field.id = label.innerText = ns;
+            field.appendChild(label);
+            lst.insertBefore(field, rst);
+            return field;
+        }
+        function renderEntry(field, key, value) {
+            let tpl = document.getElementById("template-entry");
+            fleld.innerHTML += eval("`" + tpl.innerHTML + "`");
+        }
+        function onBodyLoad() {
+            ajaxXHR({
+                url: "/config",
+                dataType: "json",
+                success: cfgs => cfgs.forEach((key, value)=>{
+                    let ns = key.split(".")[0],
+                        field = document.getElementById(ns);
+                    if (!field)
+                        field = renderField(ns);
+                    renderEntry(field, key, value);
+                }),
+            });
+        }
+    </script>
+</body>
+</html>

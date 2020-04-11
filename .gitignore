@@ -1,4 +1,6 @@
 bin
 build
+dist
 .ropeproject
 __pycache__
+node_modules

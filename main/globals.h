@@ -10,6 +10,7 @@
 #define _GLOBALS_H_
 
 #include <stdio.h>
+#include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -25,9 +26,13 @@
 char * cast_away_const(const char*);
 char * cast_away_const_force(const char*);
 
-int task_info();
-int memory_info();
-int version_info();
-int partition_info();
+const char * format_sha256(uint8_t *, size_t len = 64);
+const char * format_mac(uint8_t *, size_t len = 17);
+
+void task_info();
+void memory_info();
+void version_info();
+void hardware_info();
+void partition_info();
 
 #endif // _GLOBALS_H_

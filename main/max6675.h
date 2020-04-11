@@ -16,8 +16,10 @@ Time: Mon 27 May 2019 15:47:10 CST
  *  MISO - GPIO12
  *  MOSI - GPIO13 (not used)
  *  SCLK - GPIO14
+ *  QDWP - GPIO2 (not used)
+ *  QDHD - GPIO4 (not used)
  * >CS1  - GPIO15
- * >CS2  - GPIO33
+ * >CS2  - GPIO25
  * >CS3  - GPIO32
  */
 extern const uint8_t HSPI_IOMUX_PIN_NUM_CSn[3];
@@ -27,6 +29,8 @@ extern const uint8_t HSPI_IOMUX_PIN_NUM_CSn[3];
  *  MISO - GPIO19
  *  MOSI - GPIO23 (not used)
  *  SCLK - GPIO18
+ *  QDWP - GPIO22 (not used)
+ *  QDHD - GPIO21 (not used)
  * >CS4  - GPIO5
  * >CS5  - GPIO17
  * >CS6  - GPIO23

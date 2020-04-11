@@ -9,12 +9,11 @@
  * API list:
  *  Name    Method  Description
  *  /ws     POST    Websocket connection point: messages are parsed as JSON
- *  /info   GET     Get JSON string containing machine information
  *  /cmd    POST    TODO
  *
  * softAP only:
  *  Name    Method  Description
- *  /config GET     Configuration guide page
+ *  /config GET     Get JSON string of configuration entries
  *  /config POST    Overwrite configuration options
  *  /update GET     Updation guide page
  *  /update POST    Upload compiled binary firmware to OTA flash partition

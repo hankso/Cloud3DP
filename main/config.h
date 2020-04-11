@@ -35,11 +35,12 @@ typedef struct config_network_t {
     const char * AP_NAME;   // Hotspot SSID
     const char * AP_PASS;   // Hotspot password
     const char * AP_HOST;   // Hotspot IP address
+    const char * AP_HIDE;   // Whether to hide AP SSID
     const char * STA_NAME;  // BSSID of access point to connect after startup
     const char * STA_PASS;  // Password for access point
 } config_net_t;
 
-// For easier managing, Boolean values are stored as "0" or "1"
+// For easier managing, Boolean values are stored as ("n"|"") or ("y")
 typedef struct config_application_t {
     const char * DNS_RUN;   // Enable mDNS service
     const char * DNS_HOST;  // redirect http://{DNS_HOST} to http://{AP_HOST}
@@ -50,10 +51,9 @@ typedef struct config_application_t {
 
 // information are readonly values (after initialization)
 typedef struct config_information_t {
-    const char * NAME;      // Program name
+    const char * NAME;      // Program name (PROJECT_NAME if defined)
+    const char * VER;       // Program version (PROJECT_VER if defined)
     const char * UID;       // Unique Serial number
-    const char * VER;       // Firmware & compilation version
-        uint8_t  UART;      // Console UART number
 } config_info_t;
 
 // Global instance to get configuration
@@ -83,9 +83,10 @@ bool config_load();                 // load from nvs flash to Config
 bool config_dump();                 // save Config to nvs flash
 bool config_loads(char *);          // load Config from json
 bool config_dumps(char *);          // dump Config into json
-// Get one config value by key or set one by key & value. When you've set one
-// entry, the result is applies on both Config and NVS flash. You don't need 
-// to call config_load/config_dump to sync between.
+
+// Get one config value by key or set one by key & value. When you update one
+// entry, the result is applied on both Config and NVS flash. You don't need 
+// to call config_load/config_dump to sync between them.
 const char * config_get(const char *);
 bool config_set(const char *, const char *);
 

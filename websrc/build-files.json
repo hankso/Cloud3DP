@@ -1,0 +1,209 @@
+{
+  "dstdir": "../dist/",
+  "srcdir": "./",
+  "dirs": [
+    "ap/js",
+    "ap/css",
+    "sta/js",
+    "sta/css",
+    "src/js",
+    "src/css",
+    "data"
+  ],
+  "files": [
+    [
+      "ext/bootstrap-4.3.1.min.css",
+      "src/css/bootstrap.min.css",
+      true
+    ],
+    [
+      "ext/fontawesome-5.12.1.min.js",
+      "src/js/fontawesome.min.js",
+      true
+    ],
+    [
+      "ext/jquery-3.4.1.min.js",
+      "src/js/jquery.min.js",
+      true
+    ],
+    [
+      "ext/echarts-4.6.0.min.js",
+      "sta/js/echarts.min.js",
+      true
+    ],
+    [
+      "ext/terminal-2.6.3/terminal.min.js",
+      "sta/js/terminal.min.js",
+      true
+    ],
+    [
+      "ext/terminal-2.6.3/terminal.min.css",
+      "sta/css/terminal.min.css",
+      true
+    ],
+    [
+      "html/index-sta.html",
+      "sta/index.html",
+      false
+    ],
+    [
+      "html/temperature.html",
+      "sta/temp.html",
+      false
+    ],
+    [
+      "js/echart-option.js",
+      "sta/js/echart-option.js",
+      false
+    ],
+    [
+      "favicon.ico",
+      "sta/favicon.ico",
+      false
+    ],
+    [
+      "robots.txt",
+      "sta/robots.txt",
+      false
+    ],
+    [
+      "LICENSES",
+      "sta/licenses",
+      false
+    ],
+    [
+      "ext/ace-min-no/ace.js",
+      "ap/js/ace.js",
+      true
+    ],
+    [
+      "ext/ace-min-no/mode-css.js",
+      "ap/js/mode-css.js",
+      true
+    ],
+    [
+      "ext/ace-min-no/mode-gcode.js",
+      "ap/js/mode-gcode.js",
+      true
+    ],
+    [
+      "ext/ace-min-no/mode-html.js",
+      "ap/js/mode-html.js",
+      true
+    ],
+    [
+      "ext/ace-min-no/mode-ini.js",
+      "ap/js/mode-ini.js",
+      true
+    ],
+    [
+      "ext/ace-min-no/mode-javascript.js",
+      "ap/js/mode-javascript.js",
+      true
+    ],
+    [
+      "ext/ace-min-no/ext-searchbox.js",
+      "ap/js/ext-searchbox.js",
+      true
+    ],
+    [
+      "ext/ace-min-no/ext-settings_menu.js",
+      "ap/js/ext-settings.js",
+      true
+    ],
+    [
+      "ext/ace-min-no/ext-keybinding_menu.js",
+      "ap/js/ext-shortcut.js",
+      true
+    ],
+    [
+      "ext/ace-min-no/theme-textmate.js",
+      "ap/js/theme-textmate.js",
+      true
+    ],
+    [
+      "ext/ace-min-no/theme-twilight.js",
+      "ap/js/theme-twilight.js",
+      true
+    ],
+    [
+      "js/ajax.js",
+      "ap/js/ajax.js",
+      true
+    ],
+    [
+      "js/config.js",
+      "ap/js/config.js",
+      false
+    ],
+    [
+      "js/file-api.js",
+      "ap/js/file-api.js",
+      false
+    ],
+    [
+      "html/index-ap.html",
+      "ap/index.html",
+      false
+    ],
+    [
+      "html/files.html",
+      "ap/files.html",
+      true
+    ],
+    [
+      "html/config.html",
+      "ap/config.html",
+      true
+    ],
+    [
+      "html/editor.html",
+      "ap/editor.html",
+      true
+    ],
+    [
+      "README-ap.md",
+      "ap/README.md",
+      true
+    ],
+    [
+      "favicon.ico",
+      "ap/favicon.ico",
+      false
+    ]
+  ],
+  "mtime": {
+    "ext/bootstrap-4.3.1.min.css": 1558970389.439483,
+    "ext/ace-min-no/ext-searchbox.js": 1579027754.0,
+    "html/temperature.html": 1584691824.9039905,
+    "ext/ace-min-no/mode-css.js": 1579027754.0,
+    "LICENSES": 1584676283.6672802,
+    "js/ajax.js": 1585978431.9798934,
+    "ext/ace-min-no/ext-keybinding_menu.js": 1579027754.0,
+    "favicon.ico": 1584691978.4050014,
+    "ext/jquery-3.4.1.min.js": 1558917389.049064,
+    "ext/ace-min-no/mode-javascript.js": 1579027754.0,
+    "js/echart-option.js": 1584029226.165212,
+    "ext/echarts-4.6.0.min.js": 1584026497.0924306,
+    "html/files.html": 1586419815.0667162,
+    "html/index-sta.html": 1584691914.0286043,
+    "ext/ace-min-no/mode-gcode.js": 1579027754.0,
+    "ext/ace-min-no/theme-textmate.js": 1579027754.0,
+    "js/file-api.js": 1585977717.1440918,
+    "ext/terminal-2.6.3/terminal.min.js": 1584025620.4066656,
+    "ext/ace-min-no/ext-settings_menu.js": 1579027754.0,
+    "ext/terminal-2.6.3/terminal.min.css": 1584025620.4026654,
+    "README-ap.md": 1585559485.0343702,
+    "ext/ace-min-no/mode-html.js": 1579027754.0,
+    "ext/fontawesome-5.12.1.min.js": 1584028954.1032636,
+    "robots.txt": 1584692007.4771695,
+    "this": 1586423264.594332,
+    "ext/ace-min-no/theme-twilight.js": 1579027754.0,
+    "html/config.html": 1585981730.9113407,
+    "ext/ace-min-no/mode-ini.js": 1579027754.0,
+    "ext/ace-min-no/ace.js": 1579027754.0,
+    "js/config.js": 1584868360.453132,
+    "html/editor.html": 1586419780.9785967,
+    "html/index-ap.html": 1584693587.9858592
+  }
+}

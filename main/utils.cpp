@@ -7,14 +7,17 @@
 #include "globals.h"
 #include "config.h"
 
+#include <math.h>
 #include "esp_system.h"
+#include "esp_ota_ops.h"
 #include "esp_partition.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 
 char * cast_away_const(const char *str) {
     char *buf = (char *)malloc(strlen(str) + 1);
-    if (buf != NULL) snprintf(buf, strlen(str) + 1, str);
+    if (buf != NULL)
+        snprintf(buf, strlen(str) + 1, str);
     return buf;
 }
 
@@ -22,94 +25,157 @@ char * cast_away_const_force(const char *str) {
     return (char *)(void *)(const void *)str;
 }
 
-int task_info() {
+char hexdigits(uint8_t v) {
+    return (v < 10) ? (v + '0') : (v - 10 + 'a');
+}
+
+const char * format_sha256(uint8_t *src, size_t len) {
+    static char buf[64 + 1];
+    len = len > 64 ? 64 : len;
+    for (uint8_t i = 0; i < (len / 2); i++) {
+        fprintf(stderr, "%d, %d\n", i, src[i]);
+        buf[2 * i] = hexdigits(src[i] >> 4);
+        buf[2 * i + 1] = hexdigits(src[i] & 0xf);
+    }
+    buf[len] = '\0';
+    return buf;
+}
+
+const char * format_mac(uint8_t *src, size_t len) {
+    static char buf[17 + 1]; // XX:XX:XX:XX:XX:XX
+    len = len > 17 ? 17 : len;
+    for (uint8_t i = 0; i < 6; i++) {
+        buf[3 * i] = hexdigits(src[i] >> 4);
+        buf[3 * i + 1] = hexdigits(src[i] & 0xf);
+        buf[3 * i + 2] = (i == 5) ? '\0' : ':';
+    }
+    buf[len] = '\0';
+    return buf;
+}
+
+static const char units[] = "BKMGT";
+
+const char * format_size(size_t size, uint16_t base=1024) {
+    static char buf[7 + 1 + 1];  // xxxx.xxu\0
+    static uint8_t maxlen = strlen(units) - 1;
+    uint8_t exponent = log2(size) / log2(base);
+    uint8_t idx = exponent > maxlen ? maxlen : exponent;
+    snprintf(buf, sizeof(buf), "%.*f%c", idx > 2 ? 2 : idx,
+             size/pow(base, exponent), units[idx]);
+    return buf;
+}
+
+// Running Ready Blocked Suspended Deleted
+static const char task_states[] = "*RBSD";
+
+void task_info() {
 #ifdef CONFIG_FREERTOS_USE_TRACE_FACILITY
     uint32_t ulTotalRunTime;
     uint16_t num = uxTaskGetNumberOfTasks();
     TaskStatus_t *tasks = pvPortMalloc(num * sizeof(TaskStatus_t));
     if (tasks == NULL) {
         printf("Cannot allocate space for tasks list");
-        return 1;
+        return;
     }
     num = uxTaskGetSystemState(tasks, num, &ulTotalRunTime);
     if (!num || !ulTotalRunTime) {
         printf("TaskStatus_t array size too small. Skip");
         vPortFree(tasks);
-        return 1;
+        return;
     }
-    const char *states = "*RBSD"; // Running Ready Blocked Suspended Deleted
     printf("TID State" " Name\t\t" "Pri CPU%%" "Counter Stack\n");
     for (uint16_t i = 0; i < num; i++) {
-        printf("%3d (%c)\t " " %s\t\t" "%3d %4.1f" "%7lu %4.1fK\n",
-               tasks[i].xTaskNumber, states[tasks[i].eCurrentState],
+        printf("%3d (%c)\t " " %s\t\t" "%3d %4.1f" "%7lu %5.5s\n",
+               tasks[i].xTaskNumber, task_states[tasks[i].eCurrentState],
                tasks[i].pcTaskName, tasks[i].uxCurrentPriority,
                100.0 * tasks[i].ulRunTimeCounter / ulTotalRunTime,
                tasks[i].ulRunTimeCounter,
-               tasks[i].usStackHighWaterMark / 1024.0);
+               format_size(tasks[i].usStackHighWaterMark));
     }
     vPortFree(tasks);
 #else
     printf("Unsupported command! Enable `CONFIG_FREERTOS_USE_TRACE_FACILITY` "
-           "in menuconfig/sdkconfig to run thir command\n");
+           "in menuconfig/sdkconfig to run this command\n");
 #endif
-    return 0;
 }
 
-int version_info() {
+void version_info() {
+    const esp_app_desc_t *desc = esp_ota_get_app_description();
+    printf("IDF Version: %s based on FreeRTOS %s\n"
+           "Firmware Version: %s %s\n"
+           "Compile time: %s %s\n",
+           esp_get_idf_version(), tskKERNEL_VERSION_NUMBER,
+           // Config.info.NAME, Config.info_VER,
+           desc->project_name, desc->version,
+           __DATE__, __TIME__);
+}
+
+static uint16_t memory_types[] = {
+    MALLOC_CAP_EXEC, MALLOC_CAP_32BIT, MALLOC_CAP_8BIT,
+    MALLOC_CAP_DMA, MALLOC_CAP_INTERNAL, MALLOC_CAP_DEFAULT
+};
+
+static const char * const memory_names[] = {
+    "Execute", "32BIT", "8BIT", "DMA", "Internal", "Default"
+};
+
+void memory_info() {
+    uint8_t num = sizeof(memory_types)/sizeof(memory_types[0]);
+    multi_heap_info_t info;
+    printf(/*"Address"*/ "Type\t   Size   Used  Avail Used%%\n");
+    while (num--) {
+        heap_caps_get_info(&info, memory_types[num]);
+        size_t size = info.total_free_bytes + info.total_allocated_bytes;
+        printf("%-8.8s %6.6s %6.6s %6.6s %5.1f\n",
+               memory_names[num], format_size(size),
+               format_size(info.total_allocated_bytes),
+               format_size(info.total_free_bytes),
+               100.0 * info.total_allocated_bytes / size);
+    }
+    printf("Total: free %dK used %dK %lu/%lu blocks\n",
+           info.total_free_bytes, info.total_allocated_bytes,
+           info.free_blocks, info.total_blocks);
+}
+
+void hardware_info() {
     esp_chip_info_t info;
     esp_chip_info(&info);
     printf(
-        "IDF Version: %s based on FreeRTOS %s\n"
-        "Chip info:\n"
+        "Chip ID: %s\n"
         " model: %s\n"
         " cores: %d\n"
         " revision number: %d\n"
-        " feature: %s%s%s/%s-Flash: %.1f MB\n",
-        esp_get_idf_version(), tskKERNEL_VERSION_NUMBER,
+        " feature: %s%s%s/%s-Flash: %s\n",
+        Config.info.UID,
         info.model == CHIP_ESP32 ? "ESP32" : "???",
         info.cores, info.revision,
         info.features & CHIP_FEATURE_WIFI_BGN ? "/802.11bgn" : "",
         info.features & CHIP_FEATURE_BLE ? "/BLE" : "",
         info.features & CHIP_FEATURE_BT ? "/BT" : "",
         info.features & CHIP_FEATURE_EMB_FLASH ? "Embedded" : "External",
-        spi_flash_get_chip_size() / (1024.0 * 1024)
+        format_size(spi_flash_get_chip_size())
     );
-    printf("Chip ID: %s %s\n", "TODO", Config.info.UID);
-    printf("Firmware Version: %s %s\n", Config.info.NAME, Config.info.VER);
-    return 0;
+
+    uint8_t mac[2][6];
+    esp_read_mac(mac[0], ESP_MAC_WIFI_STA);
+    esp_read_mac(mac[1], ESP_MAC_WIFI_SOFTAP);
+    printf("STA MAC address:  %s\n", format_mac(mac[0]));
+    printf("AP  MAC address:  %s\n", format_mac(mac[1]));
 }
 
-int memory_info() {
-    return 1;
-    multi_heap_info_t info; heap_caps_get_info(&info, MALLOC_CAP_INTERNAL);
-    uint32_t mfree = info.total_free_bytes, mallo = info.total_allocated_bytes;
-    double mrate = 100.0 * mfree / (mfree + mallo);
-    fprintf(stderr, "Free mem: %d - %d", mfree, mallo);
-    uint8_t mac1[6], mac2[6];
-    esp_read_mac(mac1, ESP_MAC_WIFI_STA);
-    esp_read_mac(mac2, ESP_MAC_WIFI_SOFTAP);
-    char smac1[18], smac2[18];
-    for (uint8_t i = 0; i < 6; i++) {
-        sprintf(smac1 + strlen(smac1), "%s%02x", i ? ":" : "", mac1[i]);
-        sprintf(smac2 + strlen(smac2), "%s%02x", i ? ":" : "", mac2[i]);
-    }
+static esp_partition_type_t partition_types[] = {
+    ESP_PARTITION_TYPE_DATA, ESP_PARTITION_TYPE_APP
+};
 
-    printf("ESP free memory:  %.2f KB, %d%%\n", mfree / 1024.0, mrate);
-    printf("ESP total memory: %.2f KB, %d%%\n", mallo / 1024.0, mrate);
-    printf("WiFi status:      %s\n", "TODO");
-    printf("STA MAC address:  %s\n", smac1);
-    printf("AP  MAC address:  %s\n", smac2);
-}
-
-int partition_info() {
+void partition_info() {
+    static uint8_t max = sizeof(partition_types)/sizeof(partition_types[0]);
     uint8_t idx, num = 0;
     const esp_partition_t * parts[16], *part, *tmp;
-    esp_partition_type_t type[2] = {
-        ESP_PARTITION_TYPE_DATA, ESP_PARTITION_TYPE_APP
-    };
     esp_partition_iterator_t iter;
-    for (uint8_t i = 0; i < 2; i++) {
-        iter = esp_partition_find(type[i], ESP_PARTITION_SUBTYPE_ANY, NULL);
+    for (uint8_t i = 0; i < max; i++) {
+        iter = esp_partition_find(
+            partition_types[i],
+            ESP_PARTITION_SUBTYPE_ANY, NULL);
         while (iter != NULL && num < 16) {
             part = esp_partition_get(iter);
             for (idx = 0; idx < num; idx++) {
@@ -124,15 +190,14 @@ int partition_info() {
     }
     if (!num) {
         printf("No partitons found in flash. Skip");
-        return 1;
+        return;
     }
-    printf("LabelName\tType\tSubType\t" "Offset\t Size\t " " Encryption\n");
-    while (num-- > 0) {
+    printf("LabelName\tType\tSubType\t" "Offset\t Size\t  " "Secure\n");
+    while (num--) {
         part = parts[num];
-        printf("%-16.15s" "%s\t0x%02x\t" "0x%06x 0x%06x" " %s\n",
+        printf("%-16.15s" "%s\t0x%02x\t" "0x%06x 0x%06x " "%s\n",
                part->label, part->type ? "data" : "app", part->subtype,
                part->address, part->size,
                part->encrypted ? "true" : "false");
     }
-    return 0;
 }

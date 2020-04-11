@@ -7,55 +7,48 @@
 #include "server.h"
 #include "gpio.h"
 #include "config.h"
+#include "update.h"
 #include "globals.h"
 
-#include <Update.h>  // TODO
 #include <FS.h>
 // #include <FFat.h>
 // #define FFS FFat
-#include <SPIFFS.h>  // TODO
+#include <SPIFFS.h>  // TODO: replace with general vfs
 #define FFS SPIFFS
 
+#include "cJSON.h"
 #include "esp_log.h"
+#include "esp_system.h"
 
 static const char
-*TAG = "Server", *WS = "WebSocket",
+*TAG = "Server",
+*WS = "WebSocket",
 *ERROR_HTML =
-    "<!DOCTYPE html>"
-    "<html>"
-    "<head>"
-        "<title>Page not found</title>"
-    "</head>"
-    "<body>"
-        "<h1>404: Page not found.</h1>"
-        "<hr>"
-        "<p>We're sorry. The page you requested could not be found.</p>"
-        "<a href='/index.html'>Go back to homepage.</a>"
-    "</body>"
-    "</html>",
-*CONFIG_HTML =
-    "<!DOCTYPE html>"
-    "<html>"
-    "<head>"
-        "<title>Configuration</title>"
-    "</head>"
-    "<body>"
-        "TODO"
-    "</body>"
-    "</html>",
+"<!DOCTYPE html>"
+"<html>"
+"<head>"
+    "<title>Page not found</title>"
+"</head>"
+"<body>"
+    "<h1>404: Page not found.</h1>"
+    "<hr>"
+    "<p>We're sorry. The page you requested could not be found.</p>"
+    "<a href='/index.html'>Go back to homepage.</a>"
+"</body>"
+"</html>",
 *UPDATE_HTML =
-    "<!DOCTYPE html>"
-    "<html>"
-    "<head>"
-        "<title>OTA Updation</title>"
-    "</head>"
-    "<body>"
-        "<form action='/update' method='post' enctype='multipart/form-data'>"
-            "<input type='file' name='update'>"
-            "<input type='submit' value='Upload' onclick='this.disabled=true'>"
-        "</form>"
-    "<body>"
-    "</html>";
+"<!DOCTYPE html>"
+"<html>"
+"<head>"
+    "<title>OTA Updation</title>"
+"</head>"
+"<body>"
+    "<form action='/update' method='post' enctype='multipart/form-data'>"
+        "<input type='file' name='update'>"
+        "<input type='submit' value='Upload' onclick='this.value+=\`ing...\`'>"
+    "</form>"
+"<body>"
+"</html>";
 
 void server_loop_begin() {
     esp_log_level_set(TAG, ESP_LOG_INFO);
@@ -64,23 +57,26 @@ void server_loop_begin() {
 
 void server_loop_end() { WebServer.end(); }
 
-inline String jsonify_dir(File dir) {
-    String path, type, msg = "";
+char * jsonify_files(File dir) {
+    static char *ret = NULL;
+    cJSON *lst = cJSON_CreateArray();
     File file;
     while (file = dir.openNextFile()) {
-        path = file.name();
-        path = path.substring(path.lastIndexOf('/') + 1);
-        type = file.isDirectory() ? "dir" : "file";
-        msg += 
-            String(msg.length() ? "," : "") + 
-            "{"
-                "\"name\":\"" + path + "\","
-                "\"type\":\"" + type + "\","
-                "\"time\":" + String(file.getLastWrite()) + ""
-            "}";
+        cJSON *obj = cJSON_CreateObject();
+        cJSON_AddStringToObject(obj, "name", file.name());
+        cJSON_AddStringToObject(obj, "type", file.isDirectory()?"dir":"file");
+        cJSON_AddNumberToObject(obj, "size", file.size());
+        cJSON_AddNumberToObject(obj, "date", file.getLastWrite());
+        cJSON_AddItemToArray(lst, obj);
     }
     file.close();
-    return "[" + msg + "]";
+    if (ret != NULL) {
+        free(ret);
+        ret = NULL;
+    }
+    ret = cJSON_Print(lst);
+    cJSON_Delete(lst);
+    return ret;
 }
 
 static bool log_request = true;
@@ -96,11 +92,14 @@ void log_msg(AsyncWebServerRequest *req, const char *msg = "") {
 
 void onCommand(AsyncWebServerRequest *request) {
     log_msg(request);
-    if (!request->hasParam("cmd")) {
-        request->send(400, "text/html", "Invalid parameter");
-        return;
+    if (request->hasParam("exec")) {
+        const char *cmd = request->getParam("exec")->value().c_str();
+        printf("Command: %s\n", cmd);
+    } else if (request->hasParam("gcode")) {
+        printf("GCode parser: `%s`\n", request->getParam("gcode")->value().c_str());
+    } else {
+        request->send(400, "text/text", "Invalid parameter");
     }
-    printf("Command: %s\n", request->getParam("cmd")->value());
 }
 
 void onUpdate(AsyncWebServerRequest *request) {
@@ -109,39 +108,38 @@ void onUpdate(AsyncWebServerRequest *request) {
 }
 
 void onUpdatePost(AsyncWebServerRequest *request, String filename, size_t index, uint8_t *data, size_t len, bool final) {
+    static bool updating = false;
     if (!index) {
         log_msg(request);
+        if (updating) return request->send(400, "text/plain", "Busy updating");
+        if (!ota_updation_begin()) {
+            return request->send(400, "text/plain", ota_updation_error());
+        };
         ESP_LOGW(TAG, "Updating file: %s\n", filename.c_str());
-        // Update.runAsync(true);
-        if (!Update.begin()) {
-            ESP_LOGE(TAG, "Update error: %s", Update.errorString());
-            return;
-        }
-        Update.onProgress([](uint32_t progress, size_t size){
-            float rate = (float)progress / size * 100;
-            progress /= 1024; size /= 1024;
-            ESP_LOGI(TAG, "\rProgress: %.2f%% %d/%d KB", rate, progress, size);
-        });
-        LIGHTBLK(3);
+        updating = true;
+        LIGHTBLK(50, 3);
     }
-    LIGHTON();
-    if (!Update.hasError() && Update.write(data, len) != len) {
-        ESP_LOGE(TAG, "Update error: %s", Update.errorString());
+    if (updating && !ota_updation_error()) {
+        LIGHTON();
+        ota_updation_write(data, len);
+        LIGHTOFF();
     }
-    if (final) {
-        ESP_LOGI(TAG, "");
-        if (Update.end(true)) {
-            ESP_LOGW(TAG, "Update success: %.2f KB\n", (index + len) / 1024.0);
-        } else {
-            ESP_LOGE(TAG, "Update error: %s", Update.errorString());
+    if (final && updating) {
+        updating = false;
+        if (ota_updation_end()) {
+            ESP_LOGW(TAG, "Update success: %s\n", format_size(index + len));
         }
     }
-    LIGHTOFF();
 }
 
 void onConfig(AsyncWebServerRequest *request) {
     log_msg(request);
-    request->send(200, "text/html", CONFIG_HTML);
+    char *json;
+    if (config_dumps(json)) {
+        request->send(200, "application/json", json);
+        free(json);
+    } else
+        request->send(404, "text/plain", "Cannot dump Configuration into JSON");
 }
 
 void onConfigPost(AsyncWebServerRequest *request, String filename, size_t index, uint8_t *data, size_t len, bool final) {
@@ -150,31 +148,43 @@ void onConfigPost(AsyncWebServerRequest *request, String filename, size_t index,
 
 void onEdit(AsyncWebServerRequest *request) {
     log_msg(request);
-    if (request->hasParam("list")) {
+    if (request->hasParam("list")) { // listdir
         String path = request->getParam("list")->value();
-        if (!path.startsWith("/")) {
-            return request->send(400, "text/plain", "Invalid path name.");
-        }
+        if (!path.startsWith("/")) path = "/" + path;
         File root = FFS.open(path);
         if (!root) {
-            request->send(400, "text/plain", "Dir does not exists.");
+            request->send(404, "text/plain", "Dir does not exists.");
         } else if (!root.isDirectory()) {
-            request->send(404, "text/plain", "No more files under a file.");
+            request->send(400, "text/plain", "No more files under a file.");
             // request->redirect(path);
         } else {
-            request->send(200, "application/json", jsonify_dir(root));
+            request->send(200, "application/json", jsonify_files(root));
         }
-        root.close();
-        return;
-    } else if (!request->hasParam("path")) {
-        return request->send(400, "text/plain", "No filename specified.");
+        if (root) root.close();
+    } else if (request->hasParam("path")) { // serve static files
+        String path = request->getParam("path")->value();
+        if (!path.startsWith("/")) path = "/" + path;
+        File file = FFS.open(path);
+        if (!file) {
+            request->send(404, "text/plain", "File does not exists.");
+        } else if (file.isDirectory()) {
+            request->send(400, "text/plain", "Cannot download directory.");
+        } else {
+            request->send(file, path, String(), request->hasParam("download"));
+        }
+        if (file) file.close();
+    } else { // Online Editor page
+        const char * buildTime = __DATE__ " " __TIME__ " GMT";
+        if (request->header("If-Modified-Since").equals(buildTime)) {
+            request->send(304);
+        } else {
+            AsyncWebServerResponse *response = request->beginResponse(
+                FFS, Config.web.VIEW_EDIT);
+            response->addHeader("Content-Encoding", "gzip");
+            response->addHeader("Last-Modified", buildTime);
+            request->send(response);
+        }
     }
-    String path = request->getParam("path")->value();
-    request->send(FFS, Config.web.VIEW_EDIT, String(), false,
-        [&path](const String& var){
-            if (var == "TITLE") return path;
-        }
-    );
 }
 
 void onCreate(AsyncWebServerRequest *request) {
@@ -191,18 +201,15 @@ void onCreate(AsyncWebServerRequest *request) {
         if (FFS.exists(path)) 
             return request->send(403, "text/plain", "File already exists.");
         File file = FFS.open(path, "w");
-        if (file) {
-            file.close();
-        } else {
+        if (!file) {
             return request->send(500, "text/plain", "Create failed.");
-        }
+        } else { file.close(); }
     } else if (type == "dir") {
         File dir = FFS.open(path);
         if (dir.isDirectory()) {
             dir.close();
             return request->send(403, "text/plain", "Dir already exists.");
-        }
-        if (!FFS.mkdir(path)) {
+        } else if (!FFS.mkdir(path)) {
             return request->send(500, "text/plain", "Create failed.");
         }
     }
@@ -213,51 +220,46 @@ void onDelete(AsyncWebServerRequest *request) {
     // handle file|dir delete
     log_msg(request);
     if (!request->hasParam("path")) {
-        return request->send(400, "text/plain", "No path specified.");
+        return request->send(400, "text/plain", "No path specified");
     }
     String path = request->getParam("path")->value();
     File f = FFS.open(path);
     if (!f) return request->send(403, "text/plain", "File/dir does not exist");
-    bool dir = f.isDirectory(); f.close();
-    if (dir) {
-        if (!FFS.rmdir(path)) {
-            return request->send(500, "text/plain", "Delete path failed.");
-        }
+    bool isdir = f.isDirectory(); f.close();
+    if (isdir && !FFS.rmdir(path)) {
+        request->send(500, "text/plain", "Delete directory failed");
+    } else if (!isdir && !FFS.remove(path)) {
+        request->send(500, "text/plain", "Delete file failed");
+    } else if (request->hasParam("from")) {
+        request->redirect(request->getParam("from")->value());
     } else {
-        if (!FFS.remove(path)) {
-            return request->send(500, "text/plain", "Delete file failed.");
-        }
+        request->send(200);
     }
 }
     
 void onUpload(AsyncWebServerRequest *request, String filename, size_t index, uint8_t *data, size_t len, bool final) {
-    // handle file upload
-    LIGHTON();
     static File file;
     if (!index) {
         log_msg(request);
-        ESP_LOGW(TAG, "Uploading file: %s\n", filename.c_str());
-        if (!filename.startsWith("/")) {
-            filename = Config.web.DIR_DATA + filename;
-        }
+        if (file) return request->send(400, "text/plain", "Busy uploading");
+        if (!filename.startsWith("/")) filename = "/" + filename;
         if (FFS.exists(filename) && !request->hasParam("overwrite")) {
-            LIGHTOFF();
             return request->send(403, "text/plain", "File already exists.");
         }
+        ESP_LOGW(TAG, "Uploading file: %s\n", filename.c_str());
         file = FFS.open(filename, "w");
     }
-    file.write(data, len);
-    ESP_LOGI(TAG, "\rProgress: %d KB", index / 1024.0);
-    if (final) {
-        if (file) {
-            file.flush();
-            file.close();
-            ESP_LOGW(TAG, "Update success: %.2f KB\n", (index + len) / 1024.0);
-        } else {
-            request->send(403, "text/plain", "Upload failed.");
-        }
+    if (file) {
+        LIGHTON();
+        file.write(data, len);
+        ESP_LOGI(TAG, "\rProgress: %s", format_size(index));
+        LIGHTOFF();
     }
-    LIGHTOFF();
+    if (final && file) {
+        file.flush();
+        file.close();
+        ESP_LOGW(TAG, "Update success: %s\n", format_size(index + len));
+    }
 }
 
 void onUploadStrict(AsyncWebServerRequest *request, String filename, size_t index, uint8_t *data, size_t len, bool final){
@@ -283,10 +285,17 @@ void onErrorFileManager(AsyncWebServerRequest *request) {
         return request->send(404, "text/html", ERROR_HTML);
     } else {
         log_msg(request, " is directory, goto file manager.");
+        file.close();
     }
     request->send(FFS, Config.web.VIEW_FILE, String(), false,
         [&path](const String& var){
             if (var == "TITLE") return path;
+            if (var == "FILELIST") {
+                File root = FFS.open(path);
+                char *json = jsonify_files(root);
+                root.close();
+                return String(json);
+            }
         }
     );
 }
@@ -444,45 +453,41 @@ void WebServerClass::begin() {
     _started = true;
 }
 
-#include "max6675.h"
-inline void max6675_value_wrapper(AsyncWebServerRequest *request) {
-    // Testing function. May be deleted in the future.
-    LIGHTON();
-    log_msg(request);
-    static char values[50]; max6675_json(values);
-    request->send(200, "application/json", String(values));
-    LIGHTOFF();
-}
-
 void WebServerClass::register_sta_api() {
-    _server.on("/temp",   HTTP_GET,  max6675_value_wrapper);
     _server.on("/cmd",    HTTP_POST, onCommand);
 
     _server.serveStatic("/", FFS, Config.web.DIR_STA)
         .setDefaultFile("index.html")
         .setFilter(ON_STA_FILTER);
+
+#ifdef CONFIG_DEBUG
+    _server.serveStatic("/sta", FFS, Config.web.DIR_STA)
+        .setDefaultFile("index.html")
+        .setFilter(ON_AP_FILTER);
+#endif
 }
 
 void WebServerClass::register_ap_api() {
-    _server.on("/update", HTTP_GET,  onUpdate).setFilter(ON_AP_FILTER);
+    _server.on("/update", HTTP_GET, onUpdate).setFilter(ON_AP_FILTER);
     _server.on("/update", HTTP_POST, [](AsyncWebServerRequest *request){
+        const char *error = ota_updation_error();
         AsyncWebServerResponse *response = request->beginResponse(
-            200, "text/plain", Update.hasError() ? "FAIL" : "OK. Rebooting");
+            200, "text/plain", error ? error : "OK. Rebooting");
         response->addHeader("Connection", "close");
         request->send(response);
-        if (!Update.hasError()) ESP.restart();
+        if (error == NULL) esp_restart();
     }, onUpdatePost).setFilter(ON_AP_FILTER);
 
-    _server.on("/config", HTTP_GET,  onConfig).setFilter(ON_AP_FILTER);
+    _server.on("/config", HTTP_GET, onConfig).setFilter(ON_AP_FILTER);
     _server.on("/config", HTTP_POST, [](AsyncWebServerRequest *request){
         request->send(200, "text/plain", "OK");
     }, onConfigPost).setFilter(ON_AP_FILTER);
 
     // Use HTTP_ANY for compatibility with HTTP_PUT/HTTP_DELETE
-    _server.on("/edit",   HTTP_GET,  onEdit).setFilter(ON_AP_FILTER);
-    _server.on("/edit",   HTTP_ANY,  onCreate).setFilter(ON_AP_FILTER);
-    _server.on("/edit",   HTTP_ANY,  onDelete).setFilter(ON_AP_FILTER);
-    _server.on("/edit",   HTTP_POST, [](AsyncWebServerRequest *request){
+    _server.on("/edit", HTTP_GET, onEdit).setFilter(ON_AP_FILTER);
+    _server.on("/editc", HTTP_ANY, onCreate).setFilter(ON_AP_FILTER);
+    _server.on("/editd", HTTP_ANY, onDelete).setFilter(ON_AP_FILTER);
+    _server.on("/editu", HTTP_POST, [](AsyncWebServerRequest *request){
         request->send(200, "text/plain", "Uploaded");
     }, onUpload).setFilter(ON_AP_FILTER);
 

@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title id="title">Files Manager | </title>
+    <meta http-equiv="content-type" content="text/html; charset=utf-8">
+    <meta name="description" content="Modified based on Chromium FileManager">
+    <!-- Copyright (c) 2012 The Chromium Authors. Used under BSD-style license. -->
+    <script src="js/ajax.js"></script>
+    <script src='js/file-api.js'></script>
+    <style title="Filename: css/file-manager.css">
+        html { font-family: Ubuntu, monospace, sans-serif; }
+        h3 {
+            border-bottom: 1px solid #c0c0c0;
+            margin-bottom: 15px;
+            padding-bottom: 15px;
+            white-space: nowrap;
+        }
+        .hidden { display: none !important; }
+        a.icon { text-decoration: none; cursor: pointer; }
+        a:hover { text-decoration: underline; }
+        #parentDirLinks a { color: black; }
+        #parentDirLinks:hover a { color: grey; }
+        #parentDirLinks a:hover { color: black; }
+        th { text-align: end; cursor: pointer; }
+        th:first-child { text-align: start; }
+        tr td.details {
+            -webkit-padding-start: 2em;
+            text-align: end;
+            white-space: nowrap;
+        }
+        tr td.actions { padding-left: 8px; min-width: 60px; }
+        tr td.actions a { display: none; }
+        tr:hover td.actions a { display: inline; }
+        svg {
+            width: 25px;
+            height: 20px;
+            vertical-align: bottom;
+        }
+    </style>
+</head>
+<body onload="javascript:onBodyLoad()">
+    <h3 id="header">
+        Index of <span id="parentDirLinks"></span>
+        <a id="parentDirLink" class="icon up"></a>
+    </h3>
+    <table>
+        <thead id="thead">
+            <tr>
+                <th onclick="sortTable(0)">Name</th>
+                <th class="details" onclick="sortTable(1)">Size</th>
+                <th class="details" onclick="sortTable(2)">Date Modified</th>
+            </tr>
+        </thead>
+        <tbody id="tbody"><tbody>
+    </table>
+
+    <!-- Template to render files. -->
+    <!-- It needs parameters in namespace: name, isdir, size, date -->
+    <script type="text/template" id="template-fileinfo">
+        <td data-value="${name}">
+            <a class="icon ${isdir ? 'dir' : 'file'}" href="${root}${name}">
+                ${name}${isdir ? "/" : ""}
+            </a>
+        </td>
+        <td class="details" data-value="${size}">
+            ${ isdir ? '' : formatSize(size) }
+        </td>
+        <td class="details" data-value="${date}">
+            ${ (new Date(date)).toLocaleString() }
+        </td>
+        <td class="actions">
+            <a class="icon trash"
+             onclick="deletePath('${name}')"
+             title="Delete ${isdir ? '(directory must be empty)' : name}"></a>
+            <a class="icon edit ${isdir||name.endsWith('.gz') ? 'hidden' : ''}"
+             href="${API('edit', name)}"
+             title="Online Editor on file '${name}'"></a>
+            <a class="icon download ${isdir ? 'hidden' : ''}"
+             href="${API('down', name)}"
+             title="Download file"
+             download="${name}"
+             target="_blank"></a>
+        </td>
+    </script>
+
+    <script type="text/template" id="template-icon-svg">
+        <svg><use xlink:href="#icon-${name}" href="#icon-${name}"></svg>
+    </script>
+
+    <script id="data">
+        var fileinfo = 'FILELIST%'; // should be filled by server
+    </script>
+    
+    <script title="Filename: main.js">
+        function renderIcons() {
+            // replace all icons with Inline SVG
+            let icons = document.getElementsByClassName('icon');
+            for (let i = 0; i < icons.length; i++) {
+                let name = icons[i].classList[1];
+                let template = ge('template-icon-svg');
+                icons[i].insertAdjacentHTML(
+                    'afterBegin', eval('`' + template.innerHTML + '`'));
+            }
+        }
+        function onBodyLoad() {
+            let search = new URLSearchParams(window.location.search);
+            if (search.get('dir')) {
+                window.root = search.get('dir')
+            } else {
+                // put root in namespace
+                window.root = window.location.pathname;
+            }
+            if (!root.endsWith('/')) {
+                if (root.endsWith('html'))
+                    root = '/'
+                else
+                    root += '/';
+            }
+            
+            start(root);
+            try {
+                renderFiles(JSON.parse(fileinfo));
+            } catch(error) {
+                if (window.listDir) {
+                    listDir(root, renderFiles);  // fetch with ajaxXHR
+                } else {
+                    ge('header').innerHTML = 'Error!';
+                    ge('thead').innerHTML = `
+                        Neither files information nor 'js/file-api.js' is 
+                        provided. Cannot render files tree! Abort.`;
+                }
+            }
+            ge('data').remove();
+        };
+    </script>
+
+    <!-- <script href="js/load_time_data.js"></script> -->
+    <!-- <script href="js/i18n_template.js"></script> -->
+    <script>
+        // Copyright 2017 The Chromium Authors. All rights reserved.
+        // Use of this source code is governed by a BSD-style license that can 
+        // be found in the LICENSE file.
+        /*
+        loadTimeData.data = {
+            'header':'Index of LOCATION',
+            'headerDateModified':'Date Modified',
+            'headerName':'Name',
+            'headerSize':'Size',
+            'language':'en',
+            'parentDirText':'[parent directory]',
+            'textdirection':'ltr'
+        };
+        i18nTemplate.process(document, loadTimeData);
+        */
+    </script>
+
+    <script title="Filename: js/file-manager.js">
+        function renderFiles(filelist) {
+            filelist.forEach(({name, type, size, date})=>{
+                addRow(name, type=='dir', size, date);
+            });
+            renderIcons();
+        }
+
+        function addRow(name, isdir, size, date) {
+            if (name == '.' || name == '..') return;
+            let row = ce('tr');
+            let template = ge('template-fileinfo');
+            row.innerHTML = eval('`' + template.innerHTML + '`');
+            ge('tbody').appendChild(row);
+        }
+
+        function start(path) {
+            ge('title').innerText += path;
+            let parent = ge('parentDirLink'),
+                parents = ge('parentDirLinks');
+            if (path.length < 2) {
+                parent.style.display = 'hidden';
+                parents.innerText = path;
+                return;
+            }
+            parent.href = path + '../';
+            let lst = path.substr(0, path.length - 1).split('/');
+            for (let e, i = 0; i < lst.length; i++) {
+                e = ce('a');
+                e.innerText = lst[i] + '/';
+                e.href = lst.slice(0, i + 1).join('/') + '/';
+                parents.appendChild(e);
+            }
+        }
+
+        var sortTable = (function() {
+            // increment or decrement
+            /* var orderList = localStorage.getItem('orderList').split(','); */
+            var orderList = [-1, 1, 1];
+            return function(column) {
+                // change order on each click
+                let oldOrder = orderList[column],
+                    newOrder = 0 - oldOrder;
+                orderList[column] = newOrder;
+                /* localStorage.setItem('orderList', orderList); */
+                // sort rows according to order
+                let sortList = [], i = 0;
+                let tbody = ge('tbody');
+                while (i < tbody.rows.length) sortList.push(tbody.rows[i++]);
+                sortList.sort(function(row1, row2) {
+                    let v1 = row1.cells[column].dataset.value,
+                        v2 = row2.cells[column].dataset.value;
+                    if (column) {  // Size/Date parsed as number
+                        v1 = parseInt(v1, 10);
+                        v2 = parseInt(v2, 10);
+                    }
+                    return v1 > v2 ? newOrder : v1 < v2 ? oldOrder : 0;
+                });
+                // Appending an existing child again just moves it.
+                while (i--) tbody.appendChild(sortList[i]);
+            };
+        })();
+    </script>
+
+    <!-- Inline SVG icons generated from fontawesome -->
+    <svg class="hidden" version="1.1" xmlns="http://www.w3.org/2000/svg">
+        <symbol id="icon-up" viewBox="0 0 1024 1024">
+            <path fill="var(--color)" d="M267.294 465l93.1 97.358c17.174 17.96 16.538 46.446-1.424 63.622-17.962 17.178-46.448 16.54-63.624-1.422L129.476 451.1c-17.176-17.96-16.54-46.448 1.424-63.624a45.408 45.408 0 0 1 4.672-3.904l160.774-168.13c17.176-17.962 45.66-18.6 63.624-1.422 17.96 17.176 18.6 45.66 1.422 63.622L268.294 375h538.068c57.99 0 105 47.01 105 105v237c0 57.99-47.01 105-105 105h-293.68c-24.854 0-45-20.148-45-45s20.146-45 45-45h293.68a15 15 0 0 0 15-15V480a15 15 0 0 0-15-15H267.294z"></path>
+        </symbol>
+        <symbol id="icon-dir" viewBox="0 0 1024 1024">
+            <path d="M264 252c-33.138 0-60 26.862-60 60v400c0 33.138 26.862 60 60 60h500c33.138 0 60-26.862 60-60V412c0-33.138-26.862-60-60-60H476l-72-100h-140z m500 10c82.842 0 150 67.158 150 150v300c0 82.842-67.158 150-150 150H264c-82.842 0-150-67.158-150-150V312c0-82.842 67.158-150 150-150h140a90 90 0 0 1 73.038 37.412L522.102 262H764z"></path>
+        </symbol>
+        <symbol id="icon-file" viewBox="0 0 1024 1024">
+            <path d="M262 202c-33.138 0-60 26.862-60 60v500c0 33.138 26.862 60 60 60h500c33.138 0 60-26.862 60-60V262c0-33.138-26.862-60-60-60H262z m0-90h500c82.842 0 150 67.158 150 150v500c0 82.842-67.158 150-150 150H262c-82.842 0-150-67.158-150-150V262c0-82.842 67.158-150 150-150z"></path>
+            <path d="M343.024 382c-24.852 0-45-20.148-45-45s20.148-45 45-45h338.912c24.854 0 45 20.148 45 45s-20.146 45-45 45H343.024zM343.024 556c-24.852 0-45-20.148-45-45s20.148-45 45-45h338.912c24.854 0 45 20.148 45 45s-20.146 45-45 45H343.024zM343.024 732c-24.852 0-45-20.148-45-45s20.148-45 45-45h338.912c24.854 0 45 20.148 45 45s-20.146 45-45 45H343.024z"></path>
+        </symbol>
+        <symbol id="icon-trash" viewBox="0 0 1024 1024">
+            <path d="M448 376v432c0 13.254-10.746 24-24 24h-48c-13.254 0-24-10.746-24-24V376c0-13.254 10.746-24 24-24h48c13.254 0 24 10.746 24 24z m200-24h-48c-13.254 0-24 10.746-24 24v432c0 13.254 10.746 24 24 24h48c13.254 0 24-10.746 24-24V376c0-13.254-10.746-24-24-24z m264-192c26.51 0 48 21.49 48 48v24c0 13.254-10.746 24-24 24h-40v672c0 53.02-42.98 96-96 96H224c-53.02 0-96-42.98-96-96V256H88c-13.254 0-24-10.746-24-24v-24c0-26.51 21.49-48 48-48h148.822l68.036-113.392A96 96 0 0 1 411.178 0h201.646a96 96 0 0 1 82.32 46.608L763.178 160H912z m-539.222 0h278.446L616.32 101.826A12 12 0 0 0 606.03 96h-188.056a12 12 0 0 0-10.29 5.826L372.778 160zM800 256H224v660a12 12 0 0 0 12 12h552a12 12 0 0 0 12-12V256z"></path>
+        </symbol>
+        <symbol id="icon-edit" viewBox="0 0 1024 1024">
+            <path d="M804.6 689.8l64-64c10-10 27.4-3 27.4 11.4V928c0 53-43 96-96 96H96c-53 0-96-43-96-96V224c0-53 43-96 96-96h547c14.2 0 21.4 17.2 11.4 27.4l-64 64c-3 3-7 4.6-11.4 4.6H96v704h704V701c0-4.2 1.6-8.2 4.6-11.2z m313.2-403.6L592.6 811.4l-180.8 20c-52.4 5.8-97-38.4-91.2-91.2l20-180.8L865.8 34.2c45.8-45.8 119.8-45.8 165.4 0l86.4 86.4c45.8 45.8 45.8 120 0.2 165.6zM920.2 348L804 231.8 432.4 603.6l-14.6 130.6 130.6-14.6L920.2 348z m129.6-159.4l-86.4-86.4c-8.2-8.2-21.6-8.2-29.6 0L872 164l116.2 116.2 61.8-61.8c8-8.4 8-21.6-0.2-29.8z"></path>
+        </symbol>
+        <symbol id="icon-download" viewBox="0 0 1024 1024">
+            <path d="M557 564.974l153.188-181.04c16.054-18.972 44.448-21.34 63.42-5.286 18.972 16.054 21.338 44.448 5.284 63.42L550.56 711.92a44.982 44.982 0 0 1-8.95 10.254 44.872 44.872 0 0 1-15.082 8.432A44.944 44.944 0 0 1 512 733c-16.264 0-30.512-8.628-38.42-21.556L245.65 442.068c-16.052-18.972-13.686-47.366 5.286-63.42 18.972-16.052 47.366-13.686 63.42 5.286l152.646 180.4V157c0-24.852 20.148-45 45-45s45 20.148 45 45v407.974zM823 630c0-24.852 20.148-45 45-45s45 20.148 45 45v238c0 24.87-20.176 45.026-45.046 45l-710-0.726c-24.834-0.026-44.954-20.166-44.954-45V630c0-24.852 20.148-45 45-45s45 20.148 45 45v192.32l620 0.634V630z"></path>
+        </symbol>
+    </svg>
+</body>
+</html>

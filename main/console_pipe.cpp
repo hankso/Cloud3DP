@@ -57,7 +57,11 @@
  * Currently implemented is method 2. Try method 4 if necessary in the future.
  */
 
-#include "console_pipe.h"
+#include "console.h"
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 
 static struct {
     char *buf;  // dynamically sized buffer
@@ -107,6 +111,7 @@ void console_pipe_init() {
 #endif
 }
 
+// See https://linux.die.net/man/3/fopencookie for reference
 char * console_pipe_enter() {
     stdout_mstream.bak = stdout; return NULL;
 #ifdef CONFIG_CONSOLE_PIPE_MSTREAM

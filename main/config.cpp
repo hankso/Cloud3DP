@@ -36,19 +36,20 @@ static config_web_t WEB = {
     .DIR_SRC   = "/src/",
     .DIR_STA   = "/sta/",
     .DIR_AP    = "/ap/",
-    .DIR_DATA  = "/dat/",
+    .DIR_DATA  = "/data/",
 };
 static config_net_t NET = {
     .AP_NAME   = "TempCtrlAP",
     .AP_PASS   = "12345678",
     .AP_HOST   = "10.0.0.1",
+    .AP_HIDE   = "",
     .STA_NAME  = "",
     .STA_PASS  = "",
 };
 static config_app_t APP = {
-    .DNS_RUN   = "1",
+    .DNS_RUN   = "y",
     .DNS_HOST  = "temp.esp32.local",
-    .OTA_RUN   = "0",
+    .OTA_RUN   = "",
     .OTA_URL   = "",
     .PROMPT    = "temp> ",
 };
@@ -56,10 +57,13 @@ static config_app_t APP = {
 config_t Config = {
     .web = WEB, .net = NET, .app = APP,
     .info = {
-        .NAME  = "TempCtrl",
+#ifdef PROJECT_NAME
+        .NAME  = PROJECT_NAME,
+#else
+        .NAME  = "",
+#endif
+        .VER   = "",
         .UID   = "",
-        .VER   = __DATE__ " " __TIME__,
-        .UART  = CONFIG_CONSOLE_UART_NUM,
     }
 };
 
@@ -70,7 +74,8 @@ static const char * staticlist[] = {
     WEB.WS_NAME,   WEB.WS_PASS,
     WEB.HTTP_NAME, WEB.HTTP_PASS, WEB.VIEW_EDIT, WEB.VIEW_FILE,
     WEB.DIR_SRC,   WEB.DIR_STA,   WEB.DIR_AP,    WEB.DIR_DATA,
-    NET.AP_NAME,   NET.AP_PASS,   NET.AP_HOST,   NET.STA_NAME,  NET.STA_PASS,
+    NET.AP_NAME,   NET.AP_PASS,   NET.AP_HOST,   NET.AP_HIDE,
+    NET.STA_NAME,  NET.STA_PASS,
     APP.DNS_RUN,   APP.DNS_HOST,  APP.OTA_RUN,   APP.OTA_URL,   APP.PROMPT,
 };
 
@@ -90,6 +95,7 @@ static const char
     *NET_AP_NAME   = "net.ap.ssid",
     *NET_AP_PASS   = "net.ap.pass",
     *NET_AP_HOST   = "net.ap.host",
+    *NET_AP_HIDE   = "net.ap.hide",
     *NET_STA_NAME  = "net.sta.ssid",
     *NET_STA_PASS  = "net.sta.pass",
 
@@ -107,8 +113,8 @@ config_entry_t cfglist[] = {
     {WEB_DIR_AP,    &WEB.DIR_AP},    {WEB_DIR_DATA,  &WEB.DIR_DATA},
 
     {NET_AP_NAME,   &NET.AP_NAME},   {NET_AP_PASS,   &NET.AP_PASS},
-    {NET_AP_HOST,   &NET.AP_HOST},   {NET_STA_NAME,  &NET.STA_NAME},
-    {NET_STA_PASS,  &NET.STA_PASS},
+    {NET_AP_HOST,   &NET.AP_HOST},   {NET_AP_HIDE,   &NET.AP_HIDE},
+    {NET_STA_NAME,  &NET.STA_NAME},  {NET_STA_PASS,  &NET.STA_PASS},
 
     {APP_DNS_RUN,   &APP.DNS_RUN},   {APP_DNS_HOST,  &APP.DNS_HOST},
     {APP_OTA_RUN,   &APP.OTA_RUN},   {APP_OTA_URL,   &APP.OTA_URL},
@@ -225,22 +231,14 @@ bool config_loads(const char *json) {
     }
 }
 
-bool config_dumps(char *buffer, uint8_t maxlen) {
+bool config_dumps(char *buffer) {
     cJSON *obj = cJSON_CreateObject();
     for (uint16_t i = 0; i < numcfg; i++) {
         cJSON_AddStringToObject(obj, cfglist[i].key, *cfglist[i].value);
     }
-    char *rendered = cJSON_Print(obj);
-    uint8_t len = strlen(rendered) + 1;
-    if (len > maxlen) {
-        char *tmp = (char *)realloc(buffer, len);
-        if (tmp == NULL) return false;
-        else buffer = tmp;
-    }
-    snprintf(buffer, len, rendered);
-    free(rendered);
+    buffer = cJSON_Print(obj);
     cJSON_Delete(obj);
-    return buffer;
+    return buffer != NULL;
 }
 
 /******************************************************************************
@@ -265,8 +263,9 @@ bool config_initialize() {
 
     // load readonly values
     if (config_nvs_open("data", true) == ESP_OK) {
-        _nvs_load_str("uid",  &Config.info.UID);
+        _nvs_load_str("name",  &Config.info.NAME);
         _nvs_load_str("ver",  &Config.info.VER);
+        _nvs_load_str("uid",  &Config.info.UID);
         config_nvs_close();
     }
 

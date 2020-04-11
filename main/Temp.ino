@@ -5,48 +5,24 @@ Time: Tue 21 May 2019 09:46:44 CST
 ************************************************************************/
 
 #include <Arduino.h>
-#include <WiFi.h>
 
-#include "gpio.h"
-#include "config.h"
-#include "server.h"
 #include "globals.h"
+#include "gpio.h"
+#include "wifi.h"
+#include "config.h"
+#include "update.h"
+#include "server.h"
 #include "console.h"
-#include "max6675.h"
 
 #include "driver/uart.h"
 #include "esp_vfs_dev.h"
+#include "esp_task_wdt.h"
 
-static const char *TAG = Config.info.NAME;
-
-void wifi_initialize() {
-    WiFi.persistent(false);
-    WiFi.mode(WIFI_AP_STA);
-    if (strlen(Config.net.STA_NAME)) {
-        WiFi.begin(Config.net.STA_NAME, Config.net.STA_PASS);
-        while (WiFi.status() != WL_CONNECTED) {
-            delay(500); printf(".");
-        }
-        printf("\nWiFi connected to `%s`\n", Config.net.STA_NAME);
-        printf("IP address: %s\n", WiFi.localIP().toString().c_str());
-    }
-    IPAddress addr;
-    if (!addr.fromString(Config.net.AP_HOST)) {
-        addr = IPAddress(10, 0, 1, 1);
-    }
-    // TODO: set gateway
-    WiFi.softAPConfig(addr, addr, IPAddress(255, 255, 255, 0)); delay(100);
-    char SSID[strlen(Config.net.AP_NAME) + strlen(Config.info.UID) + 2];
-    sprintf(SSID, "%s-%s", Config.net.AP_NAME, Config.info.UID);
-    WiFi.softAP(SSID, Config.net.AP_PASS, 0, 2);
-    printf("You can connect to WiFi hotspot %d: `%s`\n", strlen(SSID), SSID);
-    printf("Visit http://%s/index.html\n", WiFi.softAPIP().toString().c_str());
-    LIGHTBLK(10, 10);
-}
+static const char *TAG = "main";
 
 void uart_initialize() {
     // UART driver configuration
-    uart_port_t num = static_cast<uart_port_t>(Config.info.UART);
+    uart_port_t num = static_cast<uart_port_t>(CONFIG_CONSOLE_UART_NUM);
     const uart_config_t uart_config = {
         .baud_rate = 115200,
         .data_bits = UART_DATA_8_BITS,
@@ -66,15 +42,18 @@ void uart_initialize() {
 }
 
 void twdt_initialize() {
+#ifdef CONFIG_TASK_WDT
+    ESP_ERROR_CHECK( esp_task_wdt_init(5, false) ); // update esp_int_wdt_init
+
     // Idle tasks are created on each core automatically by RTOS scheduler
     // with the lowest possible priority (0). Our tasks have higher priority,
     // thus leaving almost no time for idle tasks to run. Disable WDT on them.
-#if defined(CONFIG_AUTOSTART_ARDUINO)
+#ifdef CONFIG_AUTOSTART_ARDUINO
     disableCore0WDT();
     #ifndef CONFIG_FREERTOS_UNICORE
     disableCore1WDT();
     #endif // CONFIG_FREERTOS_UNICORE
-#elif defined(CONFIG_TASK_WDT)
+#else // CONFIG_AUTOSTART_ARDUINO
     #ifndef CONFIG_FREERTOS_UNICORE
     uint8_t num = 2;
     #else
@@ -82,29 +61,28 @@ void twdt_initialize() {
     #endif // CONFIG_FREERTOS_UNICORE
     while (num--) {
         TaskHandle_t idle = xTaskGetIdleTaskHandleForCPU(num);
-        if (idle && esp_task_wdt_delete(idle) == ESP_OK) {
-            ESP_LOGI(TAG, "Task IDLE%d @ CPU%d removed from WDT", num, num);
+        if (idle && !esp_task_wdt_status(idle) && !esp_task_wdt_delete(idle)) {
+            ESP_LOGW(TAG, "Task IDLE%d @ CPU%d removed from WDT", num, num);
         }
     }
-#endif // CONFIG_AUTOSTART_ARDUINO & CONFIG_TASK_WDT
+#endif // CONFIG_AUTOSTART_ARDUINO
+#endif // CONFIG_TASK_WDT
 }
 
 void init() {
     esp_log_level_set(TAG, ESP_LOG_DEBUG);
-    uart_initialize();    ESP_LOGI(TAG, "Initializing UART Serial Connection");
-    config_initialize();  ESP_LOGI(TAG, "Initializing Configuration");
-    twdt_initialize();    ESP_LOGI(TAG, "Initializing Task Watchdog Timer");
-    gpio_initialize();    ESP_LOGI(TAG, "Initializing GPIO functions");
-    wifi_initialize();    ESP_LOGI(TAG, "Initializing WiFi Connection");
-    console_initialize(); ESP_LOGI(TAG, "Initializing Command Line Console");
+    ESP_LOGI(TAG, "Initializing OTA Updation");	        ota_initialize();
+    ESP_LOGI(TAG, "Initializing UART Serial");          uart_initialize();
+    ESP_LOGI(TAG, "Initializing Configuration");	    config_initialize();
+    ESP_LOGI(TAG, "Initializing Task Watchdog Timer");	twdt_initialize();
+    ESP_LOGI(TAG, "Initializing GPIO functions");	    gpio_initialize();
+    ESP_LOGI(TAG, "Initializing WiFi Connection");	    wifi_initialize();
+    ESP_LOGI(TAG, "Initializing Command Line Console"); console_initialize();
     fflush(stdout);
 }
 
-void initVariant() {  // testing features. maybe removed in the future
-    max6675_init();
-}
-
 void setup() {
+    wifi_loop_begin();
     server_loop_begin();
     console_loop_begin();
 }
@@ -118,8 +96,7 @@ void setup() {
 
 void loop() {
     LIGHTBLK(100);
-    /* max6675_read(); */
-    delay(5000);
+    delay(2500);
     
 }
 
@@ -134,7 +111,7 @@ void loopTask(void *pvParameters) {
 }
 
 void app_main() {
-    init(); initVariant(); setup();
+    init(); setup();
     xTaskCreate(loopTask, "main-loop", 8192, NULL, 2, NULL);
 }
 #endif // CONFIG_AUTOSTART_ARDUINO

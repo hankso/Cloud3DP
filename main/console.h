@@ -27,4 +27,11 @@ void console_loop_begin(int xCoreID = -1);
 char * console_handle_command(char* cmd, bool hist = true);
 void console_register_commands();
 
+// See more at console_pipe.cpp
+#define CONFIG_CONSOLE_PIPE_MSTREAM
+void console_pipe_init();
+// Call them inside task, because this may swap _getreent()->_stdout
+char * console_pipe_enter();
+void console_pipe_exit();
+
 #endif // _CONSOLE_H
