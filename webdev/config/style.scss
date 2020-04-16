@@ -1,0 +1,108 @@
+html { font-family: Ubuntu, Tahoma, sans-serif; }
+hr { margin: 2rem 0; }
+
+#app {
+    width: 80%;
+    max-width: 700px;
+    margin: auto;
+}
+
+.namespace {
+    font-size: .8rem;
+    margin-top: 2em;
+    border-radius: 15px;
+    legend {
+        padding: 0 1em;
+        font: { size: 1.2em; weight: bold; }
+        span { cursor: pointer; }
+    }
+}
+
+.domain {
+    font-size: 1rem;
+    margin: 1em 5%;
+    + .domain { border-top: 1px solid grey; padding-top: 1em; }
+    > span {
+        cursor: pointer;
+        font-size: .9em;
+        display: inline-block;
+        box-sizing: border-box;
+        border-bottom: 2px solid transparent;
+        &:hover { border-bottom-color: grey; }
+        transition: all 0.3s;
+    }
+    .entry {
+        overflow: hidden;
+        display: flex;
+        flex-flow: row nowrap;
+        align-items: center;
+        justify-content: space-between;
+        margin: .3em .5em;
+        transition: all 0.3s;
+        > span:last-child {
+            cursor: normal;
+            max-width: 70%;
+            font-size: .8em;
+            background-color: #ccc;
+        }
+    }
+    &:not(.expand) {
+        > span { font-size: 1em; margin-left: .5em; }
+        .entry { height: 0; margin: 0; }
+    }
+}
+
+.controlbar {
+    display: flex;
+    margin: 2.5em 0;
+    padding: .8em;
+    border: { top: 1px solid grey; bottom: 1px solid grey; }
+    align-items: center;
+    justify-content: space-around;
+    * {
+        display: inline-block;
+        cursor: pointer;
+        padding: .1em 1em;
+        background-color: transparent;
+        border: 2px solid lightgrey { radius: 5px };
+        &:hover { background-color: grey; color: white; }
+    }
+}
+
+$dot-size: 22px;
+input[type="checkbox"] { display: none; }
+.switch-box {
+    display: inline-block;
+    position: relative;
+    height: $dot-size + 4px;
+    width: $dot-size * 3 + 4px;
+    .switch-dot {
+        position: absolute;
+        left: 0; right: 0; top: 0; bottom: 0;
+        border-radius: $dot-size / 2 + 2;
+        background-color: lightgrey;
+        transition: 0.5s;
+        &:after { // slider
+            content: '';
+            position: absolute;
+            top: 2px; left: 2px;
+            height: $dot-size;
+            width: $dot-size;
+            border-radius: $dot-size / 2;
+            background-color: white;
+            transition: 0.3s;
+        }
+        &:before { // text
+            content: 'OFF';
+            position: absolute;
+            top: 2px; right: $dot-size / 2;
+            font-size: .75em;
+            line-height: $dot-size;
+        }
+    }
+    input:checked ~ .switch-dot {
+        background-color: lightgreen;
+        &:after { left: $dot-size * 2 + 2px; }
+        &:before { content: 'ON'; left: $dot-size / 2; right: unset; }
+    }
+}

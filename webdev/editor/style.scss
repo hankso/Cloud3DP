@@ -1,0 +1,52 @@
+html { font-family: Ubuntu, Tahoma, monospace; }
+a[href] { color: black; text-decoration: none; }
+.hidden { display: none; }
+.left-space { padding-left: 1em; }
+.info:hover { color: blueviolet; }
+.success:hover { color: lightgreen; }
+.active, .danger:hover { color: red; }
+.custom-sb::-webkit-scrollbar {
+    height: 3px;
+    width: 3px;
+    background-color: transparent;
+}
+.custom-sb::-webkit-scrollbar-thumb { background-color: #aaa; }
+
+#app {
+    display: flex;
+    flex-flow: row wrap;
+    position: absolute;
+    left: 0; top: 0; right: 0; bottom: 0;
+    > * { box-sizing: border-box; }
+}
+
+.tree {
+    flex: 1;
+    overflow: auto;
+    height: calc(100% - 1.5em);
+    border-right: 1px solid grey;
+    .parents {
+        margin: .5em .3em;
+        color: green;
+        &:hover { color: lightgrey; }
+        span { cursor: pointer; }
+        span:hover {color: green; font-weight: bold; }
+    }
+    .leaf-list {
+        font-size: .8em;
+        white-space: nowrap;
+        .leaf {
+            height: 1.5em;
+            margin-top: .5em;
+            .path { cursor: pointer; }
+            .path.folder { font-weight: bold; }
+        }
+    }
+}
+
+@import "comp-bottombar.scss", "comp-editor.scss";
+
+// .leaf, .status-box { color: #FBD6E1; }
+// #tree { background-color: #EDEDED; }
+// .bottombar { background-color: #ACE0DD; }
+// svg { color: #FEC620; }

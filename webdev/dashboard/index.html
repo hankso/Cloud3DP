@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta http-equiv="content-type" content="text/html; charset=utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <title>Printer Console</title>
+
+    <!-- @if NODE_ENV == 'production' -->
+    <style>
+        <!-- @include ../build/dashboard/style.css -->
+    </style>
+    <script>
+        <!-- @include ../assets/ajax.js -->
+        <!-- @include ../assets/fa-config.js -->
+        <!-- @include tab-about.js -->
+        <!-- @include tab-webcam.js -->
+        <!-- @include tab-main.js -->
+    </script>
+    <link rel="stylesheet" href="/assets/css/bootstrap.min.css">
+    <script src="/assets/js/vue.min.js"></script>
+    <script src="/assets/js/vue-router.min.js"></script>
+    <script src="/assets/js/fontawesome.min.js"></script>
+    <!-- @endif -->
+
+    <!-- @exclude -->
+    <link inline rel="stylesheet" href="../build/dashboard/style.css">
+    <script inline src="../assets/ajax.js"></script>
+    <script inline src="../assets/fa-config.js"></script>
+    <script inline src="tab-about.js"></script>
+    <script inline src="tab-webcam.js"></script>
+    <script inline src="tab-main.js"></script>
+    <link rel="stylesheet" href="../node_modules/bootstrap/dist/css/bootstrap.min.css">
+    <script src="../node_modules/vue/dist/vue.js"></script>
+    <script src="../node_modules/vue-router/dist/vue-router.min.js"></script>
+    <script src="../node_modules/@fortawesome/fontawesome-free/js/all.min.js"></script>
+    <!-- @endexclude -->
+</head>
+<body onload="onBodyLoad()">
+    <div id="app">
+    <header>
+        <router-link v-for="{path, name} in $router.options.routes"
+         :to="path" :key="name" :class="{active: path == $route.path}">
+            {{ name }}
+        </router-link>
+    </header>
+    <main>
+        <keep-alive><router-view/></keep-alive>
+    </main>
+    </div>
+
+    <script>
+        window.routes = [
+            { path: '/', name: 'Home', component: tabMain },
+            { path: '/about/', name: 'About', component: tabAbout },
+            { path: '/cam/', name: 'WebCamera', component: tabWebcam },
+        ];
+        window.app = new Vue({
+            data: {
+            },
+            router: new VueRouter({ routes }),
+        });
+        function onBodyLoad() {
+            app.$mount('#app');
+        }
+    </script>
+</body>
+</html>

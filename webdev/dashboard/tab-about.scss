@@ -1,0 +1,11 @@
+details {
+    a[href].position-absolute {
+        top:0;
+        right:0;
+    }
+    .resize {
+        resize: vertical;
+        height: 0;
+        min-height:15rem;
+    }
+}

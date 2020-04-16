@@ -4,3 +4,5 @@ dist
 .ropeproject
 __pycache__
 node_modules
+*.lock
+*-lock.json

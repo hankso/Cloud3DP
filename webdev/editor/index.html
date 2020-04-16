@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <title>Online Editor</title>
+    <meta http-equiv="content-type" content="text/html; charset=utf-8">
+
+    <!-- @if NODE_ENV == 'production' -->
+    <style>
+        <!-- @include ../build/editor/style.css -->
+    </style>
+    <script>
+        <!-- @include ../assets/ajax.js -->
+        <!-- @include ../assets/file-api.js -->
+        <!-- @include ../assets/fa-config.js -->
+        <!-- @include comp-editor.js -->
+        <!-- @include comp-treeview.js -->
+        <!-- @include comp-bottombar.js -->
+        <!-- @include main.js -->
+    </script>
+    <script src="/assets/js/fontawesome.min.js"></script>
+    <script src="/assets/js/vue.min.js"></script>
+    <script src="js/ace.js"></script>
+    <script src="js/ext-shortcut.js"></script>
+    <script src="js/ext-settings.js"></script>
+    <!-- @endif -->
+
+    <!-- @exclude -->
+    <link inline rel="stylesheet" href="../build/editor/style.css">
+    <script inline src="../assets/ajax.js"></script>
+    <script inline src="../assets/file-api.js"></script>
+    <script inline src="../assets/fa-config.js"></script>
+    <script inline src="comp-editor.js"></script>
+    <script inline src="comp-treeview.js"></script>
+    <script inline src="comp-bottombar.js"></script>
+    <script inline src="main.js"></script>
+    <script src="../node_modules/@fortawesome/fontawesome-free/js/all.min.js"></script>
+    <script src="../node_modules/vue/dist/vue.js"></script>
+    <script src="../node_modules/ace-builds/src/ace.js"></script>
+    <script src="../node_modules/ace-builds/src/ext-keybinding_menu.js"></script>
+    <script src="../node_modules/ace-builds/src/ext-settings_menu.js"></script>
+    <!-- @endexclude -->
+</head>
+<body onload="onBodyLoad()">
+    <div id="app">
+    <div class="tree" v-show="treeShow" :class="{hidden: !treeShow}">
+        <div class="parents">
+            Index of
+            <span v-for="{path, link} of parents" :key="path"
+             :title="'Switch tree root to ' + link"
+             @click="treeSwitch(link)">{{ path }}</span>
+        </div>
+        <div class="leaf-list left-space">
+            <leaf-info v-for="file in treeFile" :key="file.name" :file="file"
+             :root="treeRoot" @folder="treeSwitch" @file="loadFile"
+             :class="{active: config.filename === (treeRoot + file.name)}">
+            </leaf-info>
+        </div>
+    </div>
+    <editor name="editor" v-model="config.filename"></editor>
+    <div class="bottombar">
+        <div class="status-box">
+            <transition name="slide" mode="out-in">
+                <div v-if="status.rate" class="progbar">
+                    {{ status.rate + '%' }}
+                    <div :style="{width: status.rate + '%'}"></div>
+                </div>
+                <span v-else class="message left-space">
+                    {{ status.data }}
+                </span>
+            </transition>
+        </div>
+        <menu-box>
+            <a @click="treeToggle" :title="(treeShow?'Hide':'Show')+' Tree'">
+                <i class="success"
+                 :class="`far fa-caret-square-${treeShow?'left':'right'}`">
+                </i>
+            </a>
+            <a v-if="treeShow" @click="treeRender" title="Refresh Tree View">
+                <span class="fa-layers fa-fw success">
+                    <i class="far fa-circle"></i>
+                    <i class="fas fa-redo" data-fa-transform="shrink-7"></i>
+                </span>
+            </a>
+            <a v-if="config.filename!='/'" @click="config.filename = '/'"
+             title="close WITHOUT saving">
+                <i class="far fa-times-circle danger"></i>
+            </a>
+        </menu-box>
+    </div>
+    </div>
+</body>
+</html>

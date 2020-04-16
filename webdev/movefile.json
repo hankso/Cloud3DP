@@ -1,0 +1,90 @@
+{
+  "node_modules/bootstrap/dist/css/bootstrap.min.css": {
+    "dst": "src/css/bootstrap.min.css",
+    "compress": true
+  },
+  "node_modules/jquery.terminal/css/jquery.terminal.min.css": {
+    "dst": "sta/css/terminal.min.css",
+    "compress": true
+  },
+  "node_modules/jquery.terminal/js/jquery.terminal.min.js": {
+    "compress": true,
+    "dst": "sta/js/terminal.min.js"
+  },
+  "node_modules/@fortawesome/fontawesome-free/js/all.min.js": {
+    "dst": "src/js/fontawesome.min.js",
+    "compress": true
+  },
+  "node_modules/jquery/dist/jquery.min.js": {
+    "dst": "src/js/jquery.min.js",
+    "compress": true
+  },
+  "node_modules/vue/dist/vue.min.js": {
+    "dst": "src/js/vue.min.js",
+    "compress": true
+  },
+  "node_modules/vue-router/dist/vue-router.min.js": {
+    "dst": "src/js/vue-router.min.js",
+    "compress": true
+  },
+  "node_modules/ace-builds/src-min-noconflict/ace.js": {
+    "dst": "ap/js/ace.js",
+    "compress": true
+  },
+  "node_modules/ace-builds/src-min-noconflict/ext-keybinding_menu.js": {
+    "dst": "ap/js/ext-shortcut.js",
+    "compress": true
+  },
+  "node_modules/ace-builds/src-min-noconflict/ext-settings_menu.js": {
+    "dst": "ap/js/ext-settings.js",
+    "compress": true
+  },
+  "node_modules/ace-builds/src-min-noconflict/ext-searchbox.js": {
+    "dst": "ap/js/ext-searchbox.js",
+    "compress": true
+  },
+  "node_modules/ace-builds/src-min-noconflict/mode-javascript.js": {
+    "dst": "ap/js/mode-javascript.js",
+    "compress": true
+  },
+  "node_modules/ace-builds/src-min-noconflict/mode-html.js": {
+    "dst": "ap/js/mode-html.js",
+    "compress": true
+  },
+  "node_modules/ace-builds/src-min-noconflict/mode-ini.js": {
+    "dst": "ap/js/mode-ini.js",
+    "compress": true
+  },
+  "node_modules/ace-builds/src-min-noconflict/mode-gcode.js": {
+    "dst": "ap/js/mode-gcode.js",
+    "compress": true
+  },
+  "node_modules/ace-builds/src-min-noconflict/mode-css.js": {
+    "dst": "ap/js/mode-css.js",
+    "compress": true
+  },
+  "node_modules/ace-builds/src-min-noconflict/theme-textmate.js": {
+    "dst": "ap/js/theme-textmate.js",
+    "compress": true
+  },
+  "node_modules/ace-builds/src-min-noconflict/theme-twilight.js": {
+    "dst": "ap/js/theme-twilight.js",
+    "compress": true
+  },
+  
+  "licenses.txt": { "dst": "root/licenses.txt" },
+  "assets/robots.txt": { "dst": "root/robots.txt" },
+  "assets/favicon.ico": { "dst": "root/favicon.ico" },
+  "assets/sitemap.html": { "dst": "root/sitemap.html" },
+  "assets/example.gcode": { "dst": "data/example.gcode" },
+
+  "assets/index-sta.html": { "dst": "sta/index.html" },
+  "assets/README-sta.md": { "dst": "sta/README.md" },
+  "dashboard/index.html": { "dst": "sta/dashboard.html", "compress": true },
+
+  "assets/index-ap.html": { "dst": "ap/index.html" },
+  "assets/README-ap.md": { "dst": "ap/README.md" },
+  "fileman/index.html": { "dst": "ap/files.html", "compress": true },
+  "config/index.html": { "dst": "ap/config.html", "compress": true },
+  "editor/index.html": { "dst": "ap/editor.html", "compress": true }
+}

@@ -8,8 +8,9 @@
 
 # built-in
 import os
+import re
 import sys
-import time
+import glob
 import json
 import uuid
 import argparse
@@ -27,90 +28,46 @@ def random_id(args):
         out.close()
 
 
+def _relpath(p, ref='.', strip=True):
+    p = os.path.relpath(p, ref)
+    if not strip:
+        return p
+    if (len(p.split(os.path.sep)) > 3 and len(p) > 30) or len(p) > 80:
+        m = re.findall(r'\w+%s(.+)%s\w+' % tuple([os.path.sep] * 2), p)
+        p = p.replace((m or [''])[0], '...')
+    return p
+
+
 def _absjoin(*a):
     return os.path.abspath(os.path.join(*a))
-
-
-def _mtime(fn):
-    return os.stat(fn).st_mtime
-
-
-def copy_files(args):
-    import io
-    import gzip
-    import shutil
-    inpfn = _absjoin(__basedir__, args.input)
-    with open(inpfn, 'r') as f:
-        obj = json.load(f)
-    inppath = os.path.dirname(inpfn)
-    srcdir = _absjoin(inppath, obj['srcdir'])
-    dstdir = _absjoin(inppath, obj['dstdir'])
-
-    for path in obj['dirs']:
-        path = _absjoin(dstdir, path)
-        if not os.path.exists(path):
-            os.makedirs(path)
-
-    inpmtime = _mtime(inpfn)
-    lasttime = obj.get('mtime', {'this': inpmtime})
-    for src, dst, compress in obj['files']:
-        srcfn = _absjoin(srcdir, src)
-        dstfn = _absjoin(dstdir, dst)
-        try:
-            if (
-                not args.force and
-                src in lasttime and
-                (inpmtime - lasttime['this']) < 0.5 and
-                _mtime(srcfn) <= lasttime[src]
-            ):
-                print('Skip file {}: not changed'.format(src))
-                continue
-            else:
-                lasttime[src] = _mtime(srcfn)
-            if compress:
-                dst += '.gz'
-                dstfn += '.gz'
-                with open(srcfn, 'rb') as fsrc, open(dstfn, 'wb') as fdst:
-                    buf = io.BytesIO()
-                    with gzip.GzipFile(None, 'wb', 9, fileobj=buf) as fgzip:
-                        fgzip.write(fsrc.read())
-                    fdst.write(buf.getvalue())
-            else:
-                shutil.copy(srcfn, dstfn)
-            print('Move file {} -> {}'.format(src, dst))
-        except Exception as e:
-            print('Moving {} failed: {}'.format(src, e))
-
-    lasttime['this'] = time.time()
-    obj['mtime'] = lasttime
-    with open(inpfn, 'w') as f:
-        json.dump(obj, f, indent=2, separators=(',', ': '))
 
 
 def webserver(args):
     # requirements.txt: bottle
     import bottle
-    hostdir = os.path.join(__basedir__, 'dist')
 
-    @bottle.get('/')
-    def root():
-        bottle.redirect('index.html')
+    if not args.root:
+        args.root = os.path.join(__basedir__, 'dist')
+    args.root = os.path.abspath(args.root)
+    if not (os.path.exists(args.root)):
+        return print('Cannot serve at `%s`: dirctory not found' % args.root)
+    print('WebServer running at `%s`' % _relpath(args.root))
 
     @bottle.get('/edit')
     def edit_get():
         if bottle.request.query.get('list'):
             name = bottle.request.query.get('list').strip('/')
-            path = os.path.join(hostdir, name)
+            path = os.path.join(args.root, name)
             if not os.path.exists(path):
-                bottle.error(404)
+                bottle.abort(404)
             elif os.path.isfile(path):
-                bottle.error(403)
+                bottle.abort(403)
             d = []
             for fn in os.listdir(path):
                 fpath = os.path.join(path, fn)
                 d.append({
                     'name': fn,
-                    'type': 'dir' if os.path.isdir(fpath) else 'file',
+                    'type': 'folder' if os.path.isdir(fpath) else 'file',
                     'size': os.path.getsize(fpath),
                     'date': int(os.path.getmtime(fpath)) * 1000
                 })
@@ -118,34 +75,82 @@ def webserver(args):
             return json.dumps(d)
         elif bottle.request.query.get('path'):
             return bottle.static_file(
-                bottle.request.query.get('path').strip('/'), hostdir,
+                bottle.request.query.get('path').strip('/'), args.root,
                 download=bool(bottle.request.query.get('download')))
         else:
             return bottle.redirect('/ap/editor.html')
 
-    @bottle.route('/editc', ["GET", "POST", "PUT"])
+    @bottle.route('/editc', ['GET', 'POST', 'PUT'])
     def edit_create():
-        for k, v in bottle.request.params.items():
-            print(k, v)
+        print(dict(bottle.request.params.items()))
 
-    @bottle.route('/editd', ["GET", "POST", "DELETE"])
+    @bottle.route('/editd', ['GET', 'POST', 'DELETE'])
     def edit_delete():
-        for k, v in bottle.request.params.items():
-            print(k, v)
+        print(dict(bottle.request.params.items()))
 
     @bottle.post('/editu')
     def edit_upload():
-        for k, v in bottle.request.POST.items():
-            print(k, v)
+        print(dict(bottle.request.POST.items()))
 
-    @bottle.get('/<filename:path>')
-    def static(filename):
-        fn = os.path.join(hostdir, filename)
+    @bottle.route('/config', ['GET', 'POST'])
+    def config():
+        if bottle.request.method == 'GET':
+            return {
+                'a.b.c': 123,       # number
+                'a.b.d': 'adsf',    # string
+                'e.f.g': True,      # boolean
+                'e.h.i': '1',       # fake boolean
+                'x.y.z': [1, 2]     # invalid type
+            }
+        else:
+            print(dict(bottle.request.params.items()))
+
+    def fileman():
+        if not fileman.files:
+            return bottle.HTTPError(404, 'Cannot open directory')
+        with open(fileman.files[0], 'r') as f:
+            return f.read().replace('%ROOT%', bottle.request.path)
+    pattern1 = _absjoin(args.root, '**', 'fileman*', 'index*.html')
+    pattern2 = _absjoin(args.root, '**', 'fileman*.html')
+    fileman.files = (
+        glob.glob(pattern1, recursive=True) +
+        glob.glob(pattern2, recursive=True))
+    if fileman.files:
+        print('Using template %s' % _relpath(fileman.files[0]))
+
+    def static(filename, auto=True, root=args.root):
+        '''
+        1. auto append ".gz" if resolving file
+        2. auto detect "index.html" if resolving directory
+        3. fallback to file manager if no "index.html" under dir
+        '''
+        fn = os.path.join(root, filename.strip('/\\'))
         if os.path.exists(fn):
-            return bottle.static_file(filename, hostdir)
-        elif os.path.exists(fn + ".gz"):
-            return bottle.static_file(filename + ".gz", hostdir)
-        return bottle.HTTPError(404, "File not found")
+            if os.path.isfile(fn):
+                return bottle.static_file(filename, root)
+            elif not os.path.isdir(fn):
+                return bottle.HTTPError(404, 'File not found')
+            if auto and os.path.exists(os.path.join(fn, 'index.html')):
+                index = os.path.join('/', filename, 'index.html')
+                return bottle.redirect(index)
+            return fileman()
+        elif os.path.exists(fn + '.gz'):
+            return bottle.static_file(filename + '.gz', root)
+        return bottle.HTTPError(404, 'File not found')
+
+    @bottle.route('/assets/<filename:path>')
+    def assets(filename):
+        srcdir = os.path.join(args.root, 'src')
+        if os.path.exists(srcdir):
+            filename = os.path.join('src', filename)
+        else:
+            filename = bottle.request.path  # treat as normal static file
+        return static(filename, False)
+
+    @bottle.get('/')
+    @bottle.get('/<filename:path>')
+    def root(filename='/'):
+        return static(filename, bottle.request.query.get('auto', True))
 
     bottle.run(reload=True, host=args.host, port=args.port)
 
@@ -160,20 +165,14 @@ if __name__ == '__main__':
         'serve', help='Python implemented WebServer to debug (bottle needed)')
     sparser.add_argument('-H', '--host', type=str, default='0.0.0.0')
     sparser.add_argument('-P', '--port', type=int, default=8080)
+    sparser.add_argument('root', nargs='?')
     sparser.set_defaults(func=webserver)
 
     sparser = subparsers.add_parser(
         'genid', help='Generate unique ID in NVS flash for each chip')
     sparser.add_argument('-l', '--len', type=int, default=8)
-    sparser.add_argument('-o', '--out', type=str, default=sys.stdout)
+    sparser.add_argument('-o', '--out', default=sys.stdout)
     sparser.set_defaults(func=random_id)
-
-    sparser = subparsers.add_parser(
-        'move', help='Copy web files from source to dist directory')
-    sparser.add_argument(
-        '-i', '--input', type=str, help='JSON file contains SPIFFS info')
-    sparser.add_argument('-f', '--force', action='count')
-    sparser.set_defaults(func=copy_files, input='websrc/build-files.json')
 
     args = parser.parse_args(sys.argv[1:])
     sys.exit(args.func(args))

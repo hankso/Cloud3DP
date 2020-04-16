@@ -2,7 +2,7 @@
 # See more information at https://github.com/plerup/makeEspArduino
 
 # sketch name is optional
-SKETCH := main/Temp.ino
+SKETCH := src/main.ino
 CHIP   := esp32
 
 CUSTOM_LIBS = ${ESP_PATH}/arduino
@@ -16,5 +16,4 @@ FS_DIR = ./dist
 USE_CCACHE = 1
 
 ESP_ROOT = ${ESP_PATH}/arduino/arduino-esp32
-
 include ${ESP_PATH}/arduino/makeEspArduino/makeEspArduino.mk

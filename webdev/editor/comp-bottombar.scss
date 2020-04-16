@@ -1,0 +1,64 @@
+.fade-enter-active, .fade-leave-active { transition: opacity .25s; }
+.fade-enter, .fade-leave-to, .slide-enter, .slide-leave-to { opacity: 0; }
+.slide-enter-active, .slide-leave-active { transition: all .2s; }
+.slide-enter { transform: translateY(5px); }
+.slide-leave-to { transform: translateY(-5px); }
+
+.bottombar {
+    flex: 100%;
+    height: 1.5rem;
+    position: relative;
+    display: flex;
+    flex-flow: row nowrap;
+    border: { top: 1px solid grey; radius: .75rem .75rem 0 0; }
+    > * { height: 100%; }
+    .status-box {
+        flex: auto;
+        overflow: hidden;
+        font-size: .8em;
+        line-height: 1.5rem;
+        .progbar {
+            position: relative;
+            text-align: center;
+            div {
+                position: absolute;
+                top: 0; left: 0;
+                height: 100%;
+                z-index: -1;
+                border-top-left-radius: .75rem;
+                background-color: lightgreen;
+            }
+        }
+    }
+    .menu-box {
+        width: 6.5em;
+        display: flex;
+        flex-wrap: nowrap;
+        align-items: center;
+        justify-content: space-evenly;
+        border-left: 1px solid grey;
+        padding: 0 .25em;
+        a { cursor: pointer; }
+        form {
+            position: absolute;
+            width: 18em;
+            right: .3rem;
+            bottom: 1.8rem;
+            border: 2px solid lightblue { radius: .6em .6em 0 .6em };
+            padding: 1em;
+            z-index: 999;
+            background-color: #add8e6e0;
+            display: flex;
+            flex-flow: column nowrap;
+            > div {
+                height: 2em;
+                display: flex;
+                flex-wrap: nowrap;
+                align-items: center;
+                justify-content: space-between;
+                input[type="file"] { max-width: 70%; }
+                &, input, select, button { font-size: .9em; }
+            }
+        }
+    }
+}

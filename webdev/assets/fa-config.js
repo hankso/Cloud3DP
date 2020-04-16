@@ -1,0 +1,3 @@
+FontAwesomeConfig = {
+    autoReplaceSvg: 'nest'
+}

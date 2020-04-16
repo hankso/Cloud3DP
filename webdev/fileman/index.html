@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Files Manager</title>
+    <meta http-equiv="content-type" content="text/html; charset=utf-8">
+    <meta name="description" content="Modified based on Chromium FileManager. Used under BSD-style license.">
+
+    <!-- @if NODE_ENV == 'production' -->
+    <style>
+        <!-- @include ../build/fileman/style.css -->
+    </style>
+    <script>
+        <!-- @include ../assets/ajax.js -->
+        <!-- @include ../assets/file-api.js -->
+        <!-- @include ../assets/fa-config.js -->
+        <!-- @include main.js -->
+    </script>
+    <script src="/assets/js/vue.min.js"></script>
+    <script src="/assets/js/fontawesome.min.js"></script>
+    <!-- @endif -->
+
+    <!-- @exclude -->
+    <link inline rel="stylesheet" href="../build/fileman/style.css">
+    <script inline src="../assets/ajax.js"></script>
+    <script inline src="../assets/file-api.js"></script>
+    <script inline src="../assets/fa-config.js"></script>
+    <script inline src="main.js"></script>
+    <script src="../node_modules/vue/dist/vue.js"></script>
+    <script src="../node_modules/@fortawesome/fontawesome-free/js/all.min.js"></script>
+    <!-- @endexclude -->
+</head>
+<body onload="onBodyLoad()">
+    <div id="app" class="container">
+        <h3 id="header">
+            Index of 
+            <span>
+                <a v-for="p of parents" :href="p.link">{{ p.path }}</a>
+            </span>
+            <a v-if="root != '/'" :href="root + '../'">
+                <i class="fas fa-level-up-alt"></i>
+            </a>
+        </h3>
+        <div id="thead">
+            <sort-arrow v-for="(str, idx) of sortNames" :key="str"
+             :class="{details: idx}" :inc="orderList[idx]>0"
+             :index="idx" v-model="sortIdx" @change="sort">
+                {{ str }}
+            </sort-arrow>
+        </div>
+        <div id="tbody">
+            <file-info v-for="file in files" :key="file.name" :file="file">
+            </file-info>
+        </div>
+    </div>
+
+    <script id="data">
+        // should be filled by backend
+        window.root = '%ROOT%';
+        window.fileList = '%FILELIST%';
+    </script>
+</body>
+</html>
