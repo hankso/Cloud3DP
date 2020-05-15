@@ -8,6 +8,7 @@
 #include "config.h"
 #include "globals.h"
 
+#include "esp_err.h"
 #include "esp_log.h"
 #include "esp_console.h"
 #include "freertos/FreeRTOS.h"
@@ -19,7 +20,6 @@ static const char *TAG = "Console";
 
 static const char *prompt = "$ ";
 
-// static TaskHandle_t console_task = NULL;
 static SemaphoreHandle_t xSemaphore = NULL;
 
 
@@ -71,11 +71,11 @@ char * console_handle_command(char *cmd, bool history) {
     if (xSemaphoreTake(xSemaphore, pdMS_TO_TICKS(200)) == pdFALSE) {
         return cast_away_const("Console task is executing command");
     } else {
-        ESP_LOGD(TAG, "Console get %d: `%s`", strlen(cmd), cmd);
+        ESP_LOGV(TAG, "Console get %d: `%s`", strlen(cmd), cmd);
         if (history) linenoiseHistoryAdd(cmd);
     }
-    console_pipe_enter();
-    char *buf; size_t size;
+    console_pipe_enter();                   // mask STDOUT
+    char *buf; size_t size = 0;
     stdout = open_memstream(&buf, &size);
 
     int code;
@@ -88,16 +88,18 @@ char * console_handle_command(char *cmd, bool history) {
         ESP_LOGE(TAG, "Command error: %d (%s)", err, esp_err_to_name(err));
     }
 
-    console_pipe_exit();
+    console_pipe_exit();                    // recover STDOUT
     if (buf != NULL) {
-        if (!size) {
-            free(buf);
-            buf = NULL;
-        } else {
-            buf[size] = '\0';
+        if (!size) {                        // empty string means no log output
+            free(buf); buf = NULL;
+        } else {                            // rstrip buffer string
+            while (size--) {
+                if (buf[size] != '\n' && buf[size] != '\r') break;
+                buf[size] = '\0';
+            }
+            buf[size + 1] = '\0';
         }
     }
-    // xTaskNotifyGive(console_task);
     xSemaphoreGive(xSemaphore);
     return buf;
 }
@@ -105,14 +107,13 @@ char * console_handle_command(char *cmd, bool history) {
 void console_handle_one() {
     char *ret, *cmd = linenoise(prompt);
     if (cmd != NULL && (ret = console_handle_command(cmd))) {
-        printf("%s\n", ret);
+        printf("%s\n\n", ret);
         free(ret);
     }
     linenoiseFree(cmd);
 }
 
-void console_handle_loop(void *argv) {  // executed inside task
-    // xTaskNotifyGive(console_task);
+void console_handle_loop(void *argv) {
     for (;;) { console_handle_one(); }
 }
 

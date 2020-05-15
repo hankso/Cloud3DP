@@ -8,10 +8,6 @@
 #include "config.h"
 #include "globals.h"
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-
 #include "cJSON.h"
 #include "nvs.h"
 #include "nvs_flash.h"
@@ -20,8 +16,14 @@
 #include "esp_partition.h"
 
 #if __has_include("esp_idf_version.h")
-#include "esp_idf_version.h"
+    #include "esp_idf_version.h"
+    #if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(4, 0, 0)
+    #define _NVS_ITER_LIST
+    #endif
 #endif
+
+#define NAMESPACE_INFO "info"
+#define NAMESPACE_CFG "config"
 
 static const char * TAG = "Config";
 
@@ -29,8 +31,8 @@ static const char * TAG = "Config";
 static config_web_t WEB = {
     .WS_NAME   = "",
     .WS_PASS   = "",
-    .HTTP_NAME = "temp",
-    .HTTP_PASS = "temp",
+    .HTTP_NAME = "",
+    .HTTP_PASS = "",
     .VIEW_EDIT = "/ap/editor.html",
     .VIEW_FILE = "/ap/files.html",
     .DIR_ASSET = "/src/",
@@ -40,32 +42,40 @@ static config_web_t WEB = {
     .DIR_ROOT  = "/root/",
 };
 static config_net_t NET = {
-    .AP_NAME   = "TempCtrlAP",
+    .AP_NAME   = "Cloud3DP",
     .AP_PASS   = "12345678",
     .AP_HOST   = "10.0.0.1",
-    .AP_HIDE   = "",
+    .AP_HIDE   = "0",
     .STA_NAME  = "",
     .STA_PASS  = "",
 };
 static config_app_t APP = {
-    .DNS_RUN   = "y",
-    .DNS_HOST  = "temp.esp32.local",
+    .DNS_RUN   = "",
+    .DNS_HOST  = "",
     .OTA_RUN   = "",
     .OTA_URL   = "",
-    .PROMPT    = "temp> ",
+    .PROMPT    = "c3dp> ",
+};
+static config_info_t INFO = {
+#ifdef PROJECT_NAME
+    .NAME  = PROJECT_NAME,
+#else
+    .NAME  = "",
+#endif
+#ifdef PROJECT_VER
+    .VER   = PROJECT_VER,
+#else
+    .VER   = "",
+#endif
+#ifdef CHIP_UID
+    .UID   = CHIP_UID,
+#else
+    .UID   = "",
+#endif
 };
 
 config_t Config = {
-    .web = WEB, .net = NET, .app = APP,
-    .info = {
-#ifdef PROJECT_NAME
-        .NAME  = PROJECT_NAME,
-#else
-        .NAME  = "",
-#endif
-        .VER   = "",
-        .UID   = "",
-    }
+    .web = WEB, .net = NET, .app = APP, .info = INFO
 };
 
 // Sometimes we point a const char pointer to char * (e.g. new json comming in),
@@ -91,7 +101,7 @@ static const char
     *WEB_DIR_ASSET = "web.path.assets",
     *WEB_DIR_STA   = "web.path.sta",
     *WEB_DIR_AP    = "web.path.ap",
-    *WEB_DIR_DATA  = "web.path.upload",
+    *WEB_DIR_DATA  = "web.path.data",
     *WEB_DIR_ROOT  = "web.path.static",
 
     *NET_AP_NAME   = "net.ap.ssid",
@@ -101,9 +111,9 @@ static const char
     *NET_STA_NAME  = "net.sta.ssid",
     *NET_STA_PASS  = "net.sta.pass",
 
-    *APP_DNS_RUN   = "app.dns.enable",
+    *APP_DNS_RUN   = "app.dns.run",
     *APP_DNS_HOST  = "app.dns.host",
-    *APP_OTA_RUN   = "app.ota.enable",
+    *APP_OTA_RUN   = "app.ota.run",
     *APP_OTA_URL   = "app.ota.url",
     *APP_PROMPT    = "app.prompt";
 
@@ -131,7 +141,7 @@ static uint16_t numcfg = sizeof(cfglist) / sizeof(config_entry_t);
  */
 
 // nvs helper functions
-bool _nvs_set_str(const char *, const char *, bool commit = true);
+bool _nvs_set_str(const char *, const char *, bool);
 bool _nvs_get_str(const char *, char *, size_t);
 bool _nvs_load_str(const char *, const char **);
 
@@ -154,12 +164,12 @@ bool config_set(const char *key, const char *value) {
         free((void *)*cfglist[idx].value);
     }
     *cfglist[idx].value = value;
-    _nvs_set_str(key, value);
+    _nvs_set_str(key, value, true);
     return true;
 }
 
 bool config_load() {
-    if (config_nvs_open("config")) return false;
+    if (config_nvs_open(NAMESPACE_CFG, true)) return false;
     for (uint16_t i = 0; i < numcfg; i++) {
         _nvs_load_str(cfglist[i].key, cfglist[i].value);
     }
@@ -167,7 +177,7 @@ bool config_load() {
 }
 
 bool config_dump() {
-    if (config_nvs_open("config")) return false;
+    if (config_nvs_open(NAMESPACE_CFG)) return false;
     bool s = true;
     for (uint16_t i = 0; i < numcfg; i++) {
         s = s && _nvs_set_str(cfglist[i].key, *cfglist[i].value, false);
@@ -219,10 +229,10 @@ void json_parse_object_recurse(
     }
 }
 
-bool config_loads(const char *json) {
+bool config_loads(char *json) {
     cJSON *obj = cJSON_Parse(json);
     if (obj) {
-        if (config_nvs_open("config")) return false;
+        if (config_nvs_open(NAMESPACE_CFG)) return false;
         json_parse_object_recurse(obj, &_set_config_callback);
         config_nvs_close();
         cJSON_Delete(obj);
@@ -234,14 +244,14 @@ bool config_loads(const char *json) {
     }
 }
 
-bool config_dumps(char *buffer) {
+char * config_dumps() {
     cJSON *obj = cJSON_CreateObject();
     for (uint16_t i = 0; i < numcfg; i++) {
         cJSON_AddStringToObject(obj, cfglist[i].key, *cfglist[i].value);
     }
-    buffer = cJSON_Print(obj);
+    char *string = cJSON_Print(obj);
     cJSON_Delete(obj);
-    return buffer != NULL;
+    return string;
 }
 
 /******************************************************************************
@@ -265,15 +275,13 @@ bool config_initialize() {
     esp_log_level_set(TAG, ESP_LOG_WARN);
 
     // load readonly values
-    if (config_nvs_open("data", true) == ESP_OK) {
-        _nvs_load_str("name",  &Config.info.NAME);
-        _nvs_load_str("ver",  &Config.info.VER);
+    if (config_nvs_open(NAMESPACE_INFO, true) == ESP_OK) {
         _nvs_load_str("uid",  &Config.info.UID);
         config_nvs_close();
     }
 
     // startup times counter test
-    if (config_nvs_open("data", false) == ESP_OK) {
+    if (config_nvs_open(NAMESPACE_INFO) == ESP_OK) {
         uint32_t counter = 0;
         esp_err_t err = nvs_get_u32(nvs_st.handle, "counter", &counter);
         if (err) {
@@ -379,24 +387,19 @@ esp_err_t config_nvs_close() {
 }
 
 bool config_nvs_remove(const char *key) {
-    if (config_nvs_open("config")) return false;
+    if (config_nvs_open(NAMESPACE_CFG)) return false;
     esp_err_t err = nvs_erase_key(nvs_st.handle, key);
     if (err) ESP_LOGE(TAG, "erase `%s` fail: %s", key, esp_err_to_name(err));
     return config_nvs_close() == ESP_OK;
 }
 
 bool config_nvs_clear() {
-    if (config_nvs_open("config")) return false;
+    if (config_nvs_open(NAMESPACE_CFG)) return false;
     esp_err_t err = nvs_erase_all(nvs_st.handle);
     if (err) ESP_LOGE(TAG, "erase nvs data fail: %s", esp_err_to_name(err));
     return config_nvs_close() == ESP_OK;
 }
 
-#ifdef ESP_IDF_VERSION
-#if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(4, 0, 0)
-#define _NVS_ITER_LIST
-#endif
-#endif
 void config_nvs_list() {
     if (nvs_st.part == NULL) {
         ESP_LOGE(TAG, "Cannot found nvs partition. Skip");
@@ -405,13 +408,13 @@ void config_nvs_list() {
 #ifdef _NVS_ITER_LIST
     nvs_iterator_t iter;
     nvs_entry_info_t info;
-    iter = nvs_entry_find(nvs_st.part->label, "config", NVS_TYPE_ANY);
+    iter = nvs_entry_find(nvs_st.part->label, NAMESPACE_CFG, NVS_TYPE_ANY);
     if (iter == NULL) {
-        ESP_LOGE(TAG, "Cannot find entries under `config` namespace in `%s`",
+        ESP_LOGE(TAG, "Cannot find entries under `" NAMESPACE_CFG "` in `%s`",
                  nvs_st.part->label);
         return;
     }
-    printf("Namespace: config\nKEY\t\t\tVALUE\n");
+    printf("Namespace: " NAMESPACE_CFG "\n KEY\t\t\tVALUE\n");
     while (iter != NULL) {
         nvs_entry_info(iter, &info);
         iter = nvs_entry_next(iter);
@@ -425,9 +428,12 @@ void config_nvs_list() {
     }
     nvs_release_iterator(iter);
 #else
-    if (config_nvs_open("config", true)) return;
-    else config_nvs_close();
-    printf("Namespace: config\n KEY\t\t\tVALUE\n");
+    if (config_nvs_open(NAMESPACE_CFG, true)) {
+        ESP_LOGE(TAG, "Cannot find entries under `" NAMESPACE_CFG "` in `%s`",
+                 nvs_st.part->label);
+        return;
+    } else config_nvs_close();
+    printf("Namespace: " NAMESPACE_CFG "\n KEY\t\t\tVALUE\n");
     for (uint16_t i = 0; i < numcfg; i++) {
         const char *key = cfglist[i].key, *value = *cfglist[i].value;
         printf(" %-15.15s\t", key);

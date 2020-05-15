@@ -23,7 +23,7 @@ def random_id(args):
     #  from random import choice
     #  from string import hexdigits
     #  out.write(''.join([choice(hexdigits) for i in range(args.len)]))
-    out.write(uuid.uuid4().hex[:args.len])
+    out.write(uuid.uuid4().hex[:args.len].upper())
     if type(args.out) is str:
         out.close()
 
@@ -170,7 +170,7 @@ if __name__ == '__main__':
 
     sparser = subparsers.add_parser(
         'genid', help='Generate unique ID in NVS flash for each chip')
-    sparser.add_argument('-l', '--len', type=int, default=8)
+    sparser.add_argument('-l', '--len', type=int, default=6)
     sparser.add_argument('-o', '--out', default=sys.stdout)
     sparser.set_defaults(func=random_id)
 

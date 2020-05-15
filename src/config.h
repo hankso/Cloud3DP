@@ -11,6 +11,8 @@
 
 #include "esp_err.h"
 
+typedef const char * str;
+
 typedef struct config_webserver_t {
     const char * WS_NAME;   // Username to access websocket connection
     const char * WS_PASS;   // Password. Leave it empty("") to disable
@@ -41,7 +43,7 @@ typedef struct config_network_t {
     const char * STA_PASS;  // Password for access point
 } config_net_t;
 
-// For easier managing, Boolean values are stored as ("n"|"") or ("y")
+// For easier managing, Boolean values are stored as "0" or "1" (string)
 typedef struct config_application_t {
     const char * DNS_RUN;   // Enable mDNS service
     const char * DNS_HOST;  // redirect http://{DNS_HOST} to http://{AP_HOST}
@@ -80,10 +82,10 @@ typedef struct config_entry_t {
 extern config_entry_t cfglist[];
 
 bool config_initialize();
-bool config_load();                 // load from nvs flash to Config
-bool config_dump();                 // save Config to nvs flash
-bool config_loads(char *);          // load Config from json
-bool config_dumps(char *);          // dump Config into json
+bool config_load();         // load from nvs flash to Config
+bool config_dump();         // save Config to nvs flash
+bool config_loads(char *);  // load Config from json
+char * config_dumps();      // dump Config into json
 
 // Get one config value by key or set one by key & value. When you update one
 // entry, the result is applied on both Config and NVS flash. You don't need 
@@ -95,7 +97,7 @@ bool config_set(const char *, const char *);
  * like Arduino-ESP32 library `Preference`.
  */
 esp_err_t config_nvs_init();
-esp_err_t config_nvs_open(const char *, bool ro = false);   // open namespace
+esp_err_t config_nvs_open(const char *, bool ro = false); // open namespace
 esp_err_t config_nvs_commit();          // must be called after config_nvs_open
 esp_err_t config_nvs_close();           // close with auto commit
 bool config_nvs_remove(const char *);   // remove one entry

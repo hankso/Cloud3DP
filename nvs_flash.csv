@@ -1,0 +1,11 @@
+key,type,encoding,value
+info,namespace,,
+counter,data,u32,0
+uid,data,string,{UID}
+config,namespace,,
+web.http.name,data,string,cloudp
+web.http.pass,data,string,cloudp
+app.dns.run,data,string,1
+app.dns.host,data,string,cloud3dp.local
+app.ota.run,data,string,1
+app.ota.url,data,string,,

@@ -5,9 +5,9 @@
  */
 
 #include "wifi.h"
-#include "gpio.h"
-#include "config.h"
 #include "globals.h"
+#include "config.h"
+#include "drivers.h"
 
 #include "esp_wifi.h"
 
@@ -36,7 +36,7 @@ void wifi_loop_begin() {
     // TODO: embed softAPConfig into wifi_start_ap and set gateway
     WiFi.softAPConfig(addr, addr, IPAddress(255, 255, 255, 0)); delay(100);
     if (wifi_start_ap()) {
-        LIGHTBLK(10, 10);
+        led_blink(0, 10, 10);
     }
 }
 
@@ -70,7 +70,7 @@ bool wifi_start_ap() {
     conf.ap.ssid_len = strlen((char *)conf.ap.ssid);
     conf.ap.channel = 1;
     conf.ap.ssid_hidden = 0;
-    if (WiFi.status() == WL_CONNECTED && !strcmp(Config.net.AP_HIDE, "y")) {
+    if (WiFi.status() == WL_CONNECTED && Config.net.AP_HIDE[0] - '0') {
         conf.ap.ssid_hidden = 1;
     }
     conf.ap.max_connection = 4;
@@ -130,7 +130,7 @@ void wifi_ap_list() {
     for (uint8_t i = 0; i < clients.num; i++) {
         sta = clients.sta[i];
         printf("%17s %3d  %c%c%c\n",
-               format_mac(sta.mac), sta.rssi,
+               format_mac(sta.mac, 17), sta.rssi,
                sta.phy_11b ? 'b' : ' ',
                sta.phy_11g ? 'g' : ' ',
                sta.phy_11n ? 'n' : ' ');

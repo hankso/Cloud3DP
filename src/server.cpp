@@ -5,16 +5,10 @@
  */
 
 #include "server.h"
-#include "gpio.h"
 #include "config.h"
 #include "update.h"
 #include "globals.h"
-
-#include <FS.h>
-// #include <FFat.h>
-// #define FFS FFat
-#include <SPIFFS.h>  // TODO: replace with general vfs
-#define FFS SPIFFS
+#include "drivers.h"
 
 #include "cJSON.h"
 #include "esp_log.h"
@@ -118,12 +112,12 @@ void onUpdatePost(AsyncWebServerRequest *request, String filename, size_t index,
         };
         ESP_LOGW(TAG, "Updating file: %s\n", filename.c_str());
         updating = true;
-        LIGHTBLK(50, 3);
+        led_blink(0, 50, 3);
     }
     if (updating && !ota_updation_error()) {
-        LIGHTON();
+        led_on();
         ota_updation_write(data, len);
-        LIGHTOFF();
+        led_off();
     }
     if (final && updating) {
         updating = false;
@@ -135,12 +129,13 @@ void onUpdatePost(AsyncWebServerRequest *request, String filename, size_t index,
 
 void onConfig(AsyncWebServerRequest *request) {
     log_msg(request);
-    char *json;
-    if (config_dumps(json)) {
+    char *json = config_dumps();
+    if (json) {
         request->send(200, "application/json", json);
         free(json);
-    } else
+    } else {
         request->send(404, "text/plain", "Cannot dump Configuration into JSON");
+    }
 }
 
 void onConfigPost(AsyncWebServerRequest *request, String filename, size_t index, uint8_t *data, size_t len, bool final) {
@@ -156,8 +151,7 @@ void onEdit(AsyncWebServerRequest *request) {
         if (!root) {
             request->send(404, "text/plain", "Dir does not exists.");
         } else if (!root.isDirectory()) {
-            request->send(400, "text/plain", "No more files under a file.");
-            // request->redirect(path);
+            request->send(400, "text/plain", "No file entries under a file.");
         } else {
             request->send(200, "application/json", jsonify_files(root));
         }
@@ -251,10 +245,10 @@ void onUpload(AsyncWebServerRequest *request, String filename, size_t index, uin
         file = FFS.open(filename, "w");
     }
     if (file) {
-        LIGHTON();
+        led_on();
         file.write(data, len);
         ESP_LOGI(TAG, "\rProgress: %s", format_size(index));
-        LIGHTOFF();
+        led_off();
     }
     if (final && file) {
         file.flush();
@@ -442,14 +436,12 @@ void onWebSocketData(uint32_t cid, AwsFrameInfo *info, char *data, size_t datale
 
 void WebServerClass::begin() {
     if (_started) return _server.begin();
-    FFS.begin();
     _server.reset();
     register_statics();
     register_ws_api();
     register_ap_api();
     register_sta_api();
-    DefaultHeaders::Instance()
-        .addHeader("Access-Control-Allow-Origin", "*");
+    DefaultHeaders::Instance().addHeader("Access-Control-Allow-Origin", "*");
     _server.begin();
     _started = true;
 }
@@ -473,7 +465,9 @@ void WebServerClass::register_ap_api() {
             200, "text/plain", error ? error : "OK. Rebooting");
         response->addHeader("Connection", "close");
         request->send(response);
+        vTaskDelay(pdMS_TO_TICKS(500));
         if (error == NULL) esp_restart();
+        else ESP_LOGE(TAG, error);
     }, onUpdatePost).setFilter(ON_AP_FILTER);
 
     _server.on("/config", HTTP_GET, onConfig).setFilter(ON_AP_FILTER);
@@ -504,8 +498,10 @@ void WebServerClass::register_ws_api() {
 }
 
 void WebServerClass::register_statics() {
-    _server.serveStatic("/", FFS, Config.web.DIR_ROOT);
+    _server.serveStatic("/", FFS, Config.web.DIR_ROOT)
+        .setDefaultFile("index.html");
     _server.serveStatic("/assets/", FFS, Config.web.DIR_ASSET);
+    _server.serveStatic("/upload/", FFS, Config.web.DIR_DATA);
     _server.onNotFound(onErrorFileManager);
     _server.onFileUpload(onUploadStrict);
 }

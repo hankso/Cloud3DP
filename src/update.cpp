@@ -108,22 +108,25 @@ void ota_info() {
         printf("No OTA partition found. Skip");
         return;
     }
-    printf("State\tLabelName\t" "Offset\t Size\t  " "IDF   Version\t"
-           "SHA256[0-12] Secure " "App info\n");
-    esp_app_desc_t *desc;
+    printf("State\tLabel\t" "Offset\t Size\t  " "IDF    Version "
+           "SHA256[:8] Time\n");
     const esp_partition_t *part;
+    esp_app_desc_t desc;
+    esp_err_t err;
     while (iter!= NULL) {
         part = esp_partition_get(iter);
         iter = esp_partition_next(iter);
-        esp_ota_get_partition_description(part, desc);
-        printf("%-8.7s" "%-16.15s" "0x%06x 0x%06x " "%-6.6s %9.9s"
-               "%.12s %6s " "%s %s %s\n",
+        if (err = esp_ota_get_partition_description(part, &desc)) {
+            printf("Invalid %-8.7s%s\n", part->label, esp_err_to_name(err));
+            continue;
+        }
+        printf("%-8.7s" "%-8.7s" "0x%06x 0x%06x " "%-6.6s %7.7s "
+               "%-10.8s %s %s\n",
                ota_get_img_state(part),
                part->label, part->address, part->size,
-               desc->idf_ver, desc->version, 
-               format_sha256(desc->app_elf_sha256, 12),
-               part->encrypted ? "true" : "false",
-               desc->project_name, desc->date, desc->time);
+               desc.idf_ver, desc.version, 
+               format_sha256(desc.app_elf_sha256, 8),
+               desc.date, desc.time);
     }
     esp_partition_iterator_release(iter);
 }

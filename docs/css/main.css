@@ -1,0 +1,6 @@
+.sidebar .active > a { color: var(--theme-color); }
+.markdown-section footer { font-size: .9em; }
+.markdown-section a[target="_blank"]::after {
+    content: "\2197";
+    text-decoration: none;
+}

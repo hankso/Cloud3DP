@@ -1,5 +1,5 @@
 /* 
- * File: utils.cpp
+ * File: utils.c
  * Authors: Hank <hankso1106@gmail.com>
  * Create: 2020-03-20 21:37:14
  */
@@ -8,9 +8,11 @@
 #include "config.h"
 
 #include <math.h>
+#include <sys/param.h>
 #include "esp_system.h"
 #include "esp_ota_ops.h"
 #include "esp_partition.h"
+#include "esp_heap_caps.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 
@@ -29,39 +31,40 @@ char hexdigits(uint8_t v) {
     return (v < 10) ? (v + '0') : (v - 10 + 'a');
 }
 
-const char * format_sha256(uint8_t *src, size_t len) {
+const char * format_sha256(const uint8_t *src, size_t len) {
     static char buf[64 + 1];
-    len = len > 64 ? 64 : len;
-    for (uint8_t i = 0; i < (len / 2); i++) {
-        fprintf(stderr, "%d, %d\n", i, src[i]);
+    for (uint8_t i = 0; i < 32; i++) {
         buf[2 * i] = hexdigits(src[i] >> 4);
         buf[2 * i + 1] = hexdigits(src[i] & 0xf);
     }
-    buf[len] = '\0';
+    buf[MIN(len, 64)] = '\0';
     return buf;
 }
 
-const char * format_mac(uint8_t *src, size_t len) {
+const char * format_mac(const uint8_t *src, size_t len) {
     static char buf[17 + 1]; // XX:XX:XX:XX:XX:XX
-    len = len > 17 ? 17 : len;
     for (uint8_t i = 0; i < 6; i++) {
         buf[3 * i] = hexdigits(src[i] >> 4);
         buf[3 * i + 1] = hexdigits(src[i] & 0xf);
         buf[3 * i + 2] = (i == 5) ? '\0' : ':';
     }
-    buf[len] = '\0';
+    buf[MIN(len, 17)] = '\0';
     return buf;
 }
 
 static const char units[] = "BKMGT";
 
-const char * format_size(size_t size, uint16_t base=1024) {
+// Note: format_size format string into static buffer. Therefore you don't
+// need to free the buffer after logging/strcpy etc. But you must save the
+// result before calling format_size once again, because the buffer will be
+// reused and overwriten.
+const char * format_size(size_t size) {
     static char buf[7 + 1 + 1];  // xxxx.xxu\0
     static uint8_t maxlen = strlen(units) - 1;
-    uint8_t exponent = log2(size) / log2(base);
+    uint8_t exponent = log2(size) / 10;
     uint8_t idx = exponent > maxlen ? maxlen : exponent;
     snprintf(buf, sizeof(buf), "%.*f%c", idx > 2 ? 2 : idx,
-             size/pow(base, exponent), units[idx]);
+             size/pow(1024, exponent), units[idx]);
     return buf;
 }
 
@@ -111,24 +114,23 @@ void version_info() {
 }
 
 static uint16_t memory_types[] = {
-    MALLOC_CAP_EXEC, MALLOC_CAP_32BIT, MALLOC_CAP_8BIT,
-    MALLOC_CAP_DMA, MALLOC_CAP_INTERNAL, MALLOC_CAP_DEFAULT
+    MALLOC_CAP_EXEC, MALLOC_CAP_DMA, MALLOC_CAP_INTERNAL, MALLOC_CAP_DEFAULT
 };
 
 static const char * const memory_names[] = {
-    "Execute", "32BIT", "8BIT", "DMA", "Internal", "Default"
+    "Execute", "DMA", "Intern", "Default"
 };
 
 void memory_info() {
     uint8_t num = sizeof(memory_types)/sizeof(memory_types[0]);
     multi_heap_info_t info;
-    printf(/*"Address"*/ "Type\t   Size   Used  Avail Used%%\n");
+    printf(/*"Address"*/ "Type\tSize\tUsed\tAvail\tUsed%%\n");
     while (num--) {
         heap_caps_get_info(&info, memory_types[num]);
         size_t size = info.total_free_bytes + info.total_allocated_bytes;
-        printf("%-8.8s %6.6s %6.6s %6.6s %5.1f\n",
-               memory_names[num], format_size(size),
-               format_size(info.total_allocated_bytes),
+        printf("%-8.7s%8.7s", memory_names[num], format_size(size));
+        printf("%8.7s", format_size(info.total_allocated_bytes));
+        printf("%8.7s%5.1f\n",
                format_size(info.total_free_bytes),
                100.0 * info.total_allocated_bytes / size);
     }
@@ -141,12 +143,12 @@ void hardware_info() {
     esp_chip_info_t info;
     esp_chip_info(&info);
     printf(
-        "Chip ID: %s\n"
+        "Chip UID: %s-%s\n"
         " model: %s\n"
         " cores: %d\n"
         " revision number: %d\n"
         " feature: %s%s%s/%s-Flash: %s\n",
-        Config.info.UID,
+        Config.info.NAME, Config.info.UID,
         info.model == CHIP_ESP32 ? "ESP32" : "???",
         info.cores, info.revision,
         info.features & CHIP_FEATURE_WIFI_BGN ? "/802.11bgn" : "",
@@ -159,8 +161,8 @@ void hardware_info() {
     uint8_t mac[2][6];
     esp_read_mac(mac[0], ESP_MAC_WIFI_STA);
     esp_read_mac(mac[1], ESP_MAC_WIFI_SOFTAP);
-    printf("STA MAC address:  %s\n", format_mac(mac[0]));
-    printf("AP  MAC address:  %s\n", format_mac(mac[1]));
+    printf("STA MAC address: %s\n", format_mac(mac[0], 17));
+    printf("AP  MAC address: %s\n", format_mac(mac[1], 17));
 }
 
 static esp_partition_type_t partition_types[] = {

@@ -17,6 +17,11 @@ var fileInfo = {
         this.type = this.file.type;
         this.size = this.isdir ? '' : formatSize(this.file.size);
         this.date = new Date(this.file.date).toLocaleString();
+        if (this.name.startsWith(window.root)) { // fullpath
+            this.link = this.name;
+        } else { // relative
+            this.link = window.root + this.name;
+        }
     },
     methods: {
         remove: function() { API.deletePath(this.name); }
@@ -24,9 +29,9 @@ var fileInfo = {
     computed: {
         isdir: function() { return this.type != 'file' },
         gzip: function() { return this.name.endsWith('.gz') },
-        link: function() { return window.root + this.name },
-        edit: function() { return API.url('edit', this.name) },
-        down: function() { return API.url('down', this.name) },
+        edit: function() { return API.url('edit', this.link) },
+        down: function() { return API.url('down', this.link) },
+        base: function() { return this.name.split('/').pop() },
     },
     template: `
         <div class="file" :type="type">
@@ -43,7 +48,7 @@ var fileInfo = {
                 <a class="far fa-edit" v-if="!isdir && !gzip"
                  :href="edit" :title="'online edit file ' + name"></a>
                 <a class="far fa-arrow-alt-circle-down" v-if="!isdir"
-                 :href="down" :download="name" target="_blank"
+                 :href="down" :download="base" target="_blank"
                  :title="'download file ' + name"></a>
             </span>
         </div>
@@ -97,7 +102,7 @@ function onBodyLoad() {
     // parse parameters from URL
     let search = new URLSearchParams(window.location.search);
     window.hide = search.get('hide') != 'false';
-    window.nogzip = search.get('nogzip') != 'false';
+    window.nogzip = search.get('nogzip') == 'true';
 
     if (root.indexOf('%') >= 0) root = window.location.pathname;
     if (search.has('dir')) root = search.get('dir');

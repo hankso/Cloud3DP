@@ -1,6 +1,0 @@
-key,type,encoding,value
-data,namespace,,
-counter,data,u32,0
-name,data,string,Cloud3DP
-ver,data,string,0.2.1
-uid,data,string,F72C3047

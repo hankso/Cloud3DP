@@ -22,22 +22,30 @@ Environment
 +++++++++++
 This part is for those who want to compile ESP32's firmware from source.
 
-``Makefile`` dependent on environment variable ``ESP_PATH`` - root directory of ESP-IDF and/or arduino-esp32. Here's my 
-# My ESP_PATH = /path/to/Espressif
-#
-# /path/to/Espressif
+``Makefile`` depends on environment variable ``ESP_PATH`` - root directory of ESP-IDF and/or arduino-esp32. Here's my files structure:
+
+```
+$ESP_PATH = /path/to/Espressif
+$ESP_ROOT = ${ESP_PATH}/arduino/arduino-esp32 (necessary)
+$IDF_PATH = ${ESP_PATH}/esp-idf (optional)
+
+/path/to/Espressif
 |-- arduino
 |   |-- makeEspArduino (https://github.com/plerup/makeEspArduino)
+|   |-- ... (arduino libraries like ESPAsyncWebServer etc.)
 |   |-- xtensa-esp32-elf-5.2.0 (for arduino-esp32 1.0.4 and esp-idf v3.2)
 |   `-- arduino-esp32 (https://github.com/espressif/arduino-esp32)
 |       |-- ...
 |       `-- tools
 |           |-- ...
+|           |-- mkspiffs -> ../../../mkspiffs/
 |           `-- xtensa-esp32-elf -> ../../xtensa-esp32-elf-5.2.0
+|-- mkspiffs (https://github.com/igrr/mkspiffs)
 |-- esp-idf (https://github.com/espressif/esp-idf)
 `-- xtensa-esp32-elf (8.2.0 for esp-idf v4.0)
+```
 
-# Change paths according to your installation of arduino-esp32 & makeEspArduino
+> You should change paths according to your installation of arduino-esp32 & makeEspArduino to make compiling work.
 
 Installation
 ++++++++++++
@@ -137,3 +145,8 @@ Features
     - WebSocket realtime camera streaming
     - Error detection: Is printer table clean? Is the first floor firm?
     - Printer firmware updating
+
+Size of components
+==================
+- WiFi driver & STA/AP helper functions: ~217k
+- AsyncServer framework & APIs: ~113k

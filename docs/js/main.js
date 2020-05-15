@@ -11,6 +11,7 @@ window.$docsify = {
     autoHeader: false,
     mergeNavbar: true,
     topMargin: 50,
+    themeColor: '#b4a078',
     formatUpdated: '{YY}/{MM}/{DD} {HH}:{mm}',
 
     // Navigation
@@ -39,10 +40,11 @@ window.$docsify = {
                 html, '<hr>',
                 '<footer>',
                 'Copyright &copy; 2020-present ',
-                    '<a href="https://github.com/hankso">Hankso</a>. ',
-                'Powered by <a href="https://docsify.js.org">docsify</a>',
+                '<a target="_blank" href="https://github.com/hankso">Hank</a>.',
+                'Powered by',
+                '<a target="_blank" href="https://docsify.js.org">docsify</a>.',
                 '</footer>'
-            ].join('')));
+            ].join('\n')));
         }
     ]
 };
