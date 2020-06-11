@@ -33,7 +33,7 @@
             {{ namespaces.join(' & ').toUpperCase() }}
         </h2>
         <form @submit.prevent.stop="configSave" @keypress.enter.prevent>
-            <fieldset v-for="ns of namespaces" :id="ns" class="namespace">
+            <fieldset v-for="ns of namespaces" class="namespace">
                 <legend>
                     NameSpace: {{ ns }}
                     <span @click="expandToggle(ns)">

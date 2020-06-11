@@ -12,7 +12,7 @@ const fs = require('fs');
 const path = require('path');
 
 var srcdir = path.resolve(__dirname);
-var dstdir = path.resolve(__dirname, '..', 'dist');
+var dstdir = path.resolve(__dirname, 'dist');
 var build = path.resolve(__dirname, 'build');
 var context = { NODE_ENV: 'production', DEBUG: false };
 var files = {};
@@ -127,7 +127,7 @@ var cleanAll = parallel(cleanBuild, cleanMove);
 
 function help(cb) {
     console.log('Available tasks: ', tree().nodes);
-    console.log('Use `gulp --tasks` to see more');
+    console.log('Use `npx gulp --tasks` to see more');
     cb();
 }
 

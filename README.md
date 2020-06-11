@@ -3,55 +3,6 @@ Cloud3DP
 
 3D printer board based on ESP32. This repo contains open source PCB design files. Free of usage but at your own risk!
 
-Pages
-=====
-
-- [Marlin Configuration](http://marlinfw.org/docs/configuration/configuration.html)
-- About [Marlin for ESP32](https://github.com/MarlinFirmware/Marlin/issues/14345)
-- Getting started by [Smoothieware](http://smoothieware.org/3D-printer-guide)
-
-1. use ``../assets/fs-config.js`` with fontawesome.min.js
-2. SVG JS will insert SVGs as child elements BUT with parent's attribute, so if you have events like onclick on parent element, these will also be copied to child, thus calling event listener function twice. In this ocation, explictly reference icon on child element to prevent coping.
-3. If `fas`, `fab` or `far` are in the class list while icon name `fa-*` is to be generated or rendered by Vue, you should 
-
-
-Development
-===========
-
-Environment
-+++++++++++
-This part is for those who want to compile ESP32's firmware from source.
-
-``Makefile`` depends on environment variable ``ESP_PATH`` - root directory of ESP-IDF and/or arduino-esp32. Here's my files structure:
-
-```
-$ESP_PATH = /path/to/Espressif
-$ESP_ROOT = ${ESP_PATH}/arduino/arduino-esp32 (necessary)
-$IDF_PATH = ${ESP_PATH}/esp-idf (optional)
-
-/path/to/Espressif
-|-- arduino
-|   |-- makeEspArduino (https://github.com/plerup/makeEspArduino)
-|   |-- ... (arduino libraries like ESPAsyncWebServer etc.)
-|   |-- xtensa-esp32-elf-5.2.0 (for arduino-esp32 1.0.4 and esp-idf v3.2)
-|   `-- arduino-esp32 (https://github.com/espressif/arduino-esp32)
-|       |-- ...
-|       `-- tools
-|           |-- ...
-|           |-- mkspiffs -> ../../../mkspiffs/
-|           `-- xtensa-esp32-elf -> ../../xtensa-esp32-elf-5.2.0
-|-- mkspiffs (https://github.com/igrr/mkspiffs)
-|-- esp-idf (https://github.com/espressif/esp-idf)
-`-- xtensa-esp32-elf (8.2.0 for esp-idf v4.0)
-```
-
-> You should change paths according to your installation of arduino-esp32 & makeEspArduino to make compiling work.
-
-Installation
-++++++++++++
-
-`cnpm install` costs about 8 seconds
-
 FAQs
 ====
 
@@ -146,7 +97,15 @@ Features
     - Error detection: Is printer table clean? Is the first floor firm?
     - Printer firmware updating
 
-Size of components
-==================
-- WiFi driver & STA/AP helper functions: ~217k
-- AsyncServer framework & APIs: ~113k
+TODO
+====
+- There should be no floating input pins when using multiple-bit logic devices
+- Replace 74HC595 with PCF8574 for valves control
+- 74HC595: 11-SHCP 12-STCP
+- PIN_INT internal PULLUP
+
+Links
+=====
+- [ESP3D-WEBUI](https://github.com/luc-github/ESP3D-WEBUI)
+- [Marlin Configuration](http://marlinfw.org/docs/configuration/configuration.html)
+- About [Marlin for ESP32](https://github.com/MarlinFirmware/Marlin/issues/14345)

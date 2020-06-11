@@ -22,17 +22,17 @@
  */
 
 
-/* ESP32 also use string '0' and '1' as boolean `false` and `true`.
+/* ESP32 also use string '0'/'n' and '1'/'y' as boolean `false` and `true`.
  * Convertion should happen before unflattening and after flattening.
  */
 function fakeboolEnter(obj) {
     let fakebools = window.fakebools = (window.fakebools || []), data = {};
     Object.entries(obj).forEach(([key, val]) => {
-        if (typeof val == 'string' && ['0', '1'].includes(val)) {
+        if (typeof val == 'string' && ['0', '1', 'n', 'y'].includes(val)) {
             if (!fakebools.includes(key)) {
                 fakebools.push(key);
             }
-            data[key] = val == '1';
+            data[key] = (val == '1') || (val == 'y');
         } else {
             data[key] = val;
         }

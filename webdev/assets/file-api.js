@@ -26,7 +26,8 @@ var API = (function () {
         url: url,
         download: (path, opt) => merge({ url: url('list', path) }, opt),
         listDir: (path, opt) => merge({
-            url: url('list', path), dataType: 'json' }, opt),
+            url: url('list', path), dataType: 'json'
+        }, opt),
         createPath: (path, isdir=true, opt={}) => merge({
             url: url('create', path, isdir ? 'folder' : 'file'),
             // method: 'PUT',

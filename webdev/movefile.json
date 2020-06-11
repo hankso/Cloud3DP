@@ -79,12 +79,11 @@
   "assets/example.gcode": { "dst": "data/example.gcode" },
 
   "assets/index-sta.html": { "dst": "sta/index.html" },
-  "assets/README-sta.md": { "dst": "sta/README.md" },
   "dashboard/index.html": { "dst": "sta/dashboard.html", "compress": true },
 
   "assets/index-ap.html": { "dst": "ap/index.html" },
-  "assets/README-ap.md": { "dst": "ap/README.md" },
-  "fileman/index.html": { "dst": "ap/files.html", "compress": true },
+  "assets/update.html": { "dst": "ap/update.html", "compress": true },
+  "fileman/index.html": { "dst": "ap/fileman.html", "compress": true },
   "config/index.html": { "dst": "ap/config.html", "compress": true },
   "editor/index.html": { "dst": "ap/editor.html", "compress": true }
 }

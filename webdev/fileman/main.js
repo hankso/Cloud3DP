@@ -37,7 +37,7 @@ var fileInfo = {
         <div class="file" :type="type">
             <a :href="link">
                 <i :class="['far', 'fa-fw', 'fa-' + type]"></i>
-                {{ name + (isdir ? '/' : '') }}
+                {{ name + ((isdir && !name.endsWith('/')) ? '/' : '') }}
             </a>
             <span class="details size">{{ size }}</span>
             <span class="details date">{{ date }}</span>
@@ -121,13 +121,13 @@ function onBodyLoad() {
             API.listDir(root, {
                 success: json => start(fileList = json),
                 error: () => error(`
-                    Neither files information nor 'js/file-api.js' 
-                    is provided. Cannot render files tree under 
-                    "${root}". Abort!
+                    Cannot fetch files information to render
+                    files tree under "${root}". Abort!
                 `)
             });
         } else error(e.toString());
     }
+    ge('data').remove();
 }
 
 function error(msg) {
@@ -141,5 +141,4 @@ function start(json) {
     app.fileList = JSON.parse(deepcopy);
     app.root = window.root;
     app.$mount('#app');
-    ge('data').remove();
 }

@@ -11,6 +11,7 @@
 - <hr style="border:.5px solid #ddd;margin-top:2em">
 
 - Development
-    - [Edit HTML page](editor.md)
+    - [Online Editor](editor.md)
+    - [Files Manager](manager.md)
     - [Build web pages](webpage.md)
     - [Compile firmware](compile.md)

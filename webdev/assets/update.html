@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta http-equiv="content-type" content="text/html; charset=utf-8">
+    <title>OTA Updation</title>
+    
+    <!-- @if NODE_ENV == 'production' -->
+    <script>
+        <!-- @include ajax.js -->
+    </script>
+    <!-- @endif -->
+
+    <!-- @exclude -->
+    <script inline src="ajax.js"></script>
+    <!-- @endexclude -->
+</head>
+<body>
+    <h3>ESP32 Advanced OTA Updation Guide Page</h3>
+    <form action="/update" method="post" enctype="multipart/form-data">
+        <input type="file" name="update">
+        <select>
+            <option disabled value="">Select partition</option>
+        </select>
+        <input type="submit" value="Format">
+    </form>
+</body>
+</html>
