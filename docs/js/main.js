@@ -5,7 +5,7 @@ window.$docsify = {
     loadNavbar: 'nav.md',
     loadSidebar: 'sidebar.md',
     coverpage: 'cover.md',
-    homepage: '../README.md',
+    homepage: 'README.md',
     
     // Render
     autoHeader: false,
